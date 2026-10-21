@@ -37,7 +37,7 @@ function fail(what: string, error: { message: string }): never {
 const SEES_ALL: PersonRole[] = ["founder", "manager", "admin"];
 
 export interface Me extends Person {
-  email: string;
+  email: string | null;
   canSeeAll: boolean;
 }
 
@@ -65,7 +65,8 @@ export async function requireMe(): Promise<Me> {
   return me;
 }
 
-export const listPeople = cache(async (): Promise<(Person & { email: string })[]> => {
+/** Everyone active on the team list. Email is null for people tracked only by their Callyzer phone. */
+export const listPeople = cache(async (): Promise<(Person & { email: string | null })[]> => {
   const { data, error } = await (await supabaseUser())
     .from("people")
     .select("id, full_name, role, email")
@@ -80,7 +81,7 @@ export async function getPerson(id: string): Promise<Person | null> {
   return (await listPeople()).find((p) => p.id === id) ?? null;
 }
 
-export const isSampleData = cache(async () => (await listPeople()).some((p) => p.email.endsWith(SAMPLE_EMAIL_DOMAIN)));
+export const isSampleData = cache(async () => (await listPeople()).some((p) => p.email?.endsWith(SAMPLE_EMAIL_DOMAIN)));
 
 /** The report covers the most recent IST day with calls; null before the first call arrives. */
 export const getReportDay = cache(async (): Promise<string | null> => {

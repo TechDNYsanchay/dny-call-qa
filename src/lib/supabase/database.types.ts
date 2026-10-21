@@ -327,7 +327,7 @@ export type Database = {
           auth_user_id: string | null
           callyzer_phone: string | null
           created_at: string
-          email: string
+          email: string | null
           full_name: string
           id: string
           role: Database["public"]["Enums"]["person_role"]
@@ -338,7 +338,7 @@ export type Database = {
           auth_user_id?: string | null
           callyzer_phone?: string | null
           created_at?: string
-          email: string
+          email?: string | null
           full_name: string
           id?: string
           role: Database["public"]["Enums"]["person_role"]
@@ -349,7 +349,7 @@ export type Database = {
           auth_user_id?: string | null
           callyzer_phone?: string | null
           created_at?: string
-          email?: string
+          email?: string | null
           full_name?: string
           id?: string
           role?: Database["public"]["Enums"]["person_role"]

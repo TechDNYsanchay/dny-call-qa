@@ -77,7 +77,7 @@ async function SignedInNav() {
             {formatDay(day)}
           </span>
         )}
-        <span className="text-muted" title={me.email}>
+        <span className="text-muted" title={me.email ?? undefined}>
           {me.name}
         </span>
         <form action="/auth/signout" method="post">
