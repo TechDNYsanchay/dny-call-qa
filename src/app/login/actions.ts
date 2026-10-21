@@ -24,6 +24,10 @@ export async function sendSignInLink(_: SignInState, formData: FormData): Promis
     .maybeSingle();
   if (lookupError) return { error: "Something went wrong. Try again in a minute." };
 
+  if (!person && process.env.NODE_ENV !== "production") {
+    console.info(`sign-in link: ${email} is not an active person on the team list, so no email was sent`);
+  }
+
   if (person) {
     const cookieStore = await cookies();
     cookieStore.set(NEXT_PATH_COOKIE, safeNextPath(String(formData.get("next") ?? "")), {
