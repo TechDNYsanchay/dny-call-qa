@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { callTimeToIso, parseCallyzerPayload, toDirection, toE164 } from "./callyzer";
+import { apiDateTimeToIso, callTimeToIso, parseCallHistoryRows, parseCallyzerPayload, toDirection, toE164 } from "./callyzer";
 
 // The sample from Callyzer's "How to manage webhook response" help article.
 const CALLYZER_SAMPLE = [
@@ -110,5 +110,47 @@ describe("Callyzer webhook payload", () => {
   it("rejects something that isn't a Callyzer payload", () => {
     expect(parseCallyzerPayload("hello")).toBeNull();
     expect(parseCallyzerPayload([{ logs: "nope" }])).toBeNull();
+  });
+});
+
+describe("Callyzer call-history API rows", () => {
+  it("reads the API's date and 12-hour time as Indian time", () => {
+    expect(apiDateTimeToIso("21 Oct 2026", "11:40 am")).toBe("2026-10-21T11:40:00+05:30");
+    expect(apiDateTimeToIso("21 Oct 2026", "12:05 pm")).toBe("2026-10-21T12:05:00+05:30");
+    expect(apiDateTimeToIso("21 Oct 2026", "12:05 am")).toBe("2026-10-21T00:05:00+05:30");
+    expect(apiDateTimeToIso("1 Nov 2026", "7:03 PM")).toBe("2026-11-01T19:03:00+05:30");
+    expect(apiDateTimeToIso("21 Foo 2026", "11:40 am")).toBeNull();
+    expect(apiDateTimeToIso("21 Oct 2026", "25:00")).toBeNull();
+  });
+
+  it("maps a row like the sandbox returns (invented values)", () => {
+    const parsed = parseCallHistoryRows([
+      {
+        employee: "x", employeeName: "Test Exec", employeeNumber: "9000099999", employeeCode: "",
+        client: "x", clientName: "Unknown", countryCode: "91", clientNumber: "9000011111",
+        date: "21 Oct 2026", time: "11:40 am", duration: "0h 5m 23s", durationInSeconds: 323,
+        callType: "Outgoing", note: {}, callRecordingPath: "https://media1.callyzer.co/a/b/call.mp3",
+        uniqueId: " abc123 ", createdDate: "", modifiedDate: "",
+      },
+    ]);
+    expect(parsed.skipped).toEqual([]);
+    expect(parsed.calls[0]).toEqual({
+      sourceId: "abc123",
+      agentPhone: "+919000099999",
+      agentName: "Test Exec",
+      clientPhone: "+919000011111",
+      clientName: null,
+      startedAt: "2026-10-21T11:40:00+05:30",
+      durationSec: 323,
+      direction: "outgoing",
+      recordingUrl: "https://media1.callyzer.co/a/b/call.mp3",
+      notScored: null,
+    });
+  });
+
+  it("skips unreadable rows", () => {
+    const parsed = parseCallHistoryRows([{ uniqueId: "a", date: "?", time: "?", durationInSeconds: 10 }, { nope: true }]);
+    expect(parsed.calls).toEqual([]);
+    expect(parsed.skipped).toHaveLength(2);
   });
 });

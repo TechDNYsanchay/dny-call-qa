@@ -1,6 +1,8 @@
-// Callyzer webhook payload -> call records. Pure functions; storing them is in lib/ingest.
-// Payload shape (help.callyzer.co, "How to manage webhook response"): a list of employees, each
-// with the call logs synced from their phone.
+// Callyzer -> call records, from the webhook payload or the call-history API. Pure functions;
+// storing them is in lib/ingest.
+// Webhook shape (help.callyzer.co, "How to manage webhook response"): a list of employees, each
+// with the call logs synced from their phone. API shape: POST /admin/api/call/callHistory returns
+// { data: [one row per call], recordsTotal }.
 
 import { z } from "zod";
 import { scoringEligibility, type NotScoredReason } from "@/lib/scoring/compute";
@@ -108,6 +110,74 @@ export function parseCallyzerPayload(payload: unknown): ParsedPayload | null {
         notScored: eligibility.eligible || eligibility.reason === "recording_pending" ? null : eligibility.reason,
       });
     }
+  }
+  return result;
+}
+
+const MONTHS: Record<string, string> = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+};
+
+/** API date "21 Oct 2026" + time "11:40 am" (phone's local time, India) -> ISO with +05:30. */
+export function apiDateTimeToIso(date: string, time: string): string | null {
+  const d = date.trim().match(/^(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\s+(\d{4})$/);
+  const t = time.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap]m)?$/i);
+  const month = d && MONTHS[d[2].toLowerCase()];
+  if (!d || !t || !month) return null;
+  let hour = Number(t[1]);
+  const meridiem = t[4]?.toLowerCase();
+  if (meridiem === "pm" && hour < 12) hour += 12;
+  if (meridiem === "am" && hour === 12) hour = 0;
+  if (hour > 23 || Number(t[2]) > 59) return null;
+  return `${d[3]}-${month}-${d[1].padStart(2, "0")}T${String(hour).padStart(2, "0")}:${t[2]}:${t[3] ?? "00"}+05:30`;
+}
+
+const ApiRowSchema = z.object({
+  uniqueId: z.string().trim().min(1),
+  employeeName: z.string().nullish(),
+  employeeNumber: z.union([z.string(), z.number()]).nullish(),
+  clientName: z.string().nullish(),
+  countryCode: z.union([z.string(), z.number()]).nullish(),
+  clientNumber: z.union([z.string(), z.number()]).nullish(),
+  date: z.string(),
+  time: z.string(),
+  durationInSeconds: z.coerce.number().int().nonnegative(),
+  callType: z.string().nullish(),
+  callRecordingPath: z.string().nullish(),
+});
+
+/** Rows from the call-history API, in the same shape the webhook produces. */
+export function parseCallHistoryRows(rows: unknown[]): ParsedPayload {
+  const result: ParsedPayload = { calls: [], skipped: [] };
+  for (const raw of rows) {
+    const row = ApiRowSchema.safeParse(raw);
+    if (!row.success) {
+      result.skipped.push({ reason: "unreadable call-history row", id: (raw as { uniqueId?: string } | null)?.uniqueId?.trim() });
+      continue;
+    }
+    const r = row.data;
+    const startedAt = apiDateTimeToIso(r.date, r.time);
+    if (!startedAt) {
+      result.skipped.push({ reason: `unreadable date/time "${r.date} ${r.time}"`, id: r.uniqueId });
+      continue;
+    }
+    const recordingUrl = r.callRecordingPath?.startsWith("https://") ? r.callRecordingPath : null;
+    const eligibility = scoringEligibility({ durationSec: r.durationInSeconds, recordingStatus: recordingUrl ? "available" : "pending" });
+    const name = r.clientName?.trim() ?? "";
+    result.calls.push({
+      sourceId: r.uniqueId,
+      // The API's countryCode belongs to the client; DNY's own phones are Indian numbers.
+      agentPhone: toE164("91", r.employeeNumber),
+      agentName: r.employeeName?.trim() || null,
+      clientPhone: toE164(r.countryCode, r.clientNumber),
+      clientName: UNKNOWN_NAMES.has(name.toLowerCase()) ? null : name,
+      startedAt,
+      durationSec: r.durationInSeconds,
+      direction: toDirection(r.callType),
+      recordingUrl,
+      notScored: eligibility.eligible || eligibility.reason === "recording_pending" ? null : eligibility.reason,
+    });
   }
   return result;
 }

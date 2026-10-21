@@ -6,6 +6,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/callyzer-sync",
+      "schedule": "*/15 3-17 * * *"
+    },
+    {
       "path": "/api/cron/sweep",
       "schedule": "0 19 * * *"
     },

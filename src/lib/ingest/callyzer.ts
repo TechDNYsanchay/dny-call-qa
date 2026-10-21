@@ -1,4 +1,5 @@
-// Stores Callyzer calls. Pipeline code: uses the secret key because no viewer is involved.
+// Stores Callyzer calls from the call-history API, matched only by Callyzer's own call ID.
+// Pipeline code: uses the secret key because no viewer is involved.
 
 import "server-only";
 import type { CallyzerCall } from "@/lib/callyzer";
