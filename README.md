@@ -35,6 +35,17 @@ npm run people -- test-link --email founder@sample.invalid   # sign in as a samp
 
 Founders, managers and admins see every call and report. Executives and consultants see only their own; the database enforces this with row-level security, not just the screens. The sign-in email template is `supabase/templates/magic_link.html` (pushed with `npx supabase config push`).
 
+### Sign in with Google (one-time setup)
+
+1. In Google Cloud, create an OAuth client (type **Web application**) in a project owned by the DNY Google Workspace, with the consent screen audience set to **Internal** (only dnyhospitality.com accounts).
+   - Authorized JavaScript origins: `https://dny-call-qa.vercel.app`, `http://localhost:3100`
+   - Authorized redirect URI: `https://jlqppprkvlwhtbvhgiik.supabase.co/auth/v1/callback`
+2. Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.local`, then push them to Supabase without committing them:
+   `set -a; . ./.env.local; set +a; npx supabase config push`
+3. Set `GOOGLE_SIGN_IN=on` in `.env.local` and in Vercel, then redeploy to show the button.
+
+Google only proves who someone is; they still need to be an active person on the team list (`npm run people -- add`) with the same email.
+
 ## What's where
 
 | Path | What it holds |
