@@ -1,0 +1,10 @@
+# Never upload local secrets or local tool state; Vercel gets env vars from its own settings.
+.env*
+!.env.example
+.vercel
+.claude
+.next
+node_modules
+coverage
+supabase/.temp
+supabase/.branches

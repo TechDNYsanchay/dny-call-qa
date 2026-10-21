@@ -1,9 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["bom1"],
+  "framework": "nextjs",
+  "regions": [
+    "bom1"
+  ],
   "crons": [
-    { "path": "/api/cron/sweep", "schedule": "0 19 * * *" },
-    { "path": "/api/cron/build-reports", "schedule": "30 0 * * *" },
-    { "path": "/api/cron/send-reports", "schedule": "30 2 * * *" }
+    {
+      "path": "/api/cron/sweep",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/build-reports",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/send-reports",
+      "schedule": "30 2 * * *"
+    }
   ]
 }
