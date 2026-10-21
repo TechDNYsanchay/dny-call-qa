@@ -1,6 +1,7 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { io } from "next/cache";
 import { cookies } from "next/headers";
 import type { Database } from "./database.types";
 
@@ -16,6 +17,9 @@ function env(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABL
  */
 export async function supabaseUser() {
   const cookieStore = await cookies();
+  // The auth client reads the clock (session expiry). io() keeps that out of any prerender,
+  // including per-user prefetches that have cookies; during a real request it resolves at once.
+  await io();
   return createServerClient<Database>(env("NEXT_PUBLIC_SUPABASE_URL"), env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"), {
     cookies: {
       getAll: () => cookieStore.getAll(),
