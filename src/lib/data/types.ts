@@ -3,7 +3,7 @@ import type { FinalScore, NotScoredReason, RecordingStatus } from "@/lib/scoring
 import type { CallMetrics, SpeakerRole, Topic } from "@/lib/scoring/metrics";
 import type { CallResult } from "@/lib/scoring/schema";
 
-export type PersonRole = "executive" | "consultant" | "founder" | "manager";
+export type PersonRole = "executive" | "consultant" | "founder" | "manager" | "admin";
 
 export interface Person {
   id: string;

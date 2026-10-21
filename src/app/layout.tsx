@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
-import { IS_SAMPLE_DATA, REPORT_DATE } from "@/lib/data";
+import { Suspense } from "react";
+import { getReportDay, isSampleData } from "@/lib/data";
 import { formatDay } from "@/lib/format";
 import "./globals.css";
 
@@ -43,15 +44,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 </Link>
               ))}
             </nav>
-            {IS_SAMPLE_DATA && (
-              <span className="ml-auto rounded-full bg-warning/15 px-2.5 py-0.5 text-xs font-medium">
-                Sample data · {formatDay(REPORT_DATE)}
-              </span>
-            )}
+            <Suspense fallback={null}>
+              <DayBadge />
+            </Suspense>
           </div>
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-8">{children}</main>
       </body>
     </html>
+  );
+}
+
+async function DayBadge() {
+  const [day, sample] = await Promise.all([getReportDay(), isSampleData()]);
+  if (!day) return null;
+  return (
+    <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-medium ${sample ? "bg-warning/15" : "bg-background"}`}>
+      {sample ? "Sample data · " : "Calls from "}
+      {formatDay(day)}
+    </span>
   );
 }

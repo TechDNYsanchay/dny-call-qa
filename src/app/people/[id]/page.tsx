@@ -1,18 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { BandBadge, Card, Chip, PageHeader, Quote, StatTile } from "@/components/ui";
-import { getPerson, listCalls, listPeople, REPORT_DATE } from "@/lib/data";
+import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, Quote, StatTile } from "@/components/ui";
+import { getPerson, getReportDay, listCalls } from "@/lib/data";
 import { formatClock, formatDay } from "@/lib/format";
 import { personDayReport } from "@/lib/reports";
 
-export function generateStaticParams() {
-  return listPeople().map((person) => ({ id: person.id }));
-}
-
 export default function PersonReportPage({ params }: PageProps<"/people/[id]">) {
   return (
-    <Suspense fallback={<p className="text-sm text-muted">Loading report…</p>}>
+    <Suspense fallback={<Loading what="report" />}>
       <PersonReport params={params} />
     </Suspense>
   );
@@ -20,9 +16,11 @@ export default function PersonReportPage({ params }: PageProps<"/people/[id]">) 
 
 async function PersonReport({ params }: Pick<PageProps<"/people/[id]">, "params">) {
   const { id } = await params;
-  const person = getPerson(id);
+  const person = await getPerson(id);
   if (!person) notFound();
-  const report = personDayReport(person, listCalls());
+  const day = await getReportDay();
+  if (!day) return <EmptyState title={`${person.name}: daily QA report`} />;
+  const report = personDayReport(person, await listCalls(day));
 
   return (
     <>
@@ -31,7 +29,7 @@ async function PersonReport({ params }: Pick<PageProps<"/people/[id]">, "params"
       </Link>
       <PageHeader
         title={`${person.name}: daily QA report`}
-        subtitle={`${person.title} · calls from ${formatDay(REPORT_DATE)} · emailed at 8 am`}
+        subtitle={`${person.title} · calls from ${formatDay(day)} · emailed at 8 am`}
       >
         {report.average !== null && report.band && <BandBadge score={report.average} band={report.band} />}
       </PageHeader>

@@ -1,16 +1,27 @@
 import Link from "next/link";
-import { BandBadge, Card, Chip, PageHeader } from "@/components/ui";
-import { getPerson, listCalls, REPORT_DATE } from "@/lib/data";
+import { Suspense } from "react";
+import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader } from "@/components/ui";
+import { getReportDay, listCalls, listPeople } from "@/lib/data";
 import { formatClock, formatDay, formatDuration, NOT_SCORED_LABEL, STREAM_LABEL } from "@/lib/format";
 
 export const metadata = { title: "Calls · DNY Sales Agent" };
 
 export default function CallsPage() {
-  const calls = listCalls();
+  return (
+    <Suspense fallback={<Loading what="calls" />}>
+      <Calls />
+    </Suspense>
+  );
+}
+
+async function Calls() {
+  const day = await getReportDay();
+  if (!day) return <EmptyState title="Calls" />;
+  const [calls, people] = await Promise.all([listCalls(day), listPeople()]);
 
   return (
     <>
-      <PageHeader title="Calls" subtitle={`${calls.length} calls logged on ${formatDay(REPORT_DATE)}`} />
+      <PageHeader title="Calls" subtitle={`${calls.length} calls logged on ${formatDay(day)}`} />
       <Card>
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
           <table className="w-full min-w-[680px] text-sm">
@@ -32,7 +43,7 @@ export default function CallsPage() {
                       {formatClock(call.startedAt)}
                     </Link>
                   </td>
-                  <td className="px-2 py-3">{getPerson(call.personId)?.name}</td>
+                  <td className="px-2 py-3">{people.find((p) => p.id === call.personId)?.name}</td>
                   <td className="px-2 py-3 text-muted">{STREAM_LABEL[call.stream]}</td>
                   <td className="px-2 py-3">
                     {call.client.name}

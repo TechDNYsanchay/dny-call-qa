@@ -69,6 +69,24 @@ export function PageHeader({ title, subtitle, children }: { title: string; subti
   );
 }
 
+export function Loading({ what }: { what: string }) {
+  return <p className="text-sm text-muted">Loading {what}…</p>;
+}
+
+export function EmptyState({ title }: { title: string }) {
+  return (
+    <>
+      <PageHeader title={title} />
+      <Card>
+        <p className="text-sm text-muted">
+          No calls yet. They appear here once Callyzer and tl;dv are connected, or after loading sample data with{" "}
+          <code className="font-mono">npm run db:sample</code>.
+        </p>
+      </Card>
+    </>
+  );
+}
+
 export function Quote({ evidence }: { evidence: Evidence }) {
   return (
     <span className="text-sm">

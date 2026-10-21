@@ -1,5 +1,5 @@
-// Display helpers. Dates are formatted from their ISO strings rather than with Date,
-// so pages stay deterministic when Next.js prerenders them.
+// Display helpers. None of them reads the current time (Date.now() or new Date()),
+// which Next.js does not allow while prerendering.
 
 import type { Stream } from "@/lib/scoring/call-sheets";
 import type { NotScoredReason } from "@/lib/scoring/compute";
@@ -11,6 +11,24 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export function formatDay(isoDate: string): string {
   const [y, m, d] = isoDate.slice(0, 10).split("-");
   return `${Number(d)} ${MONTHS.at(Number(m) - 1)} ${y}`;
+}
+
+const IST_OFFSET_MS = 330 * 60_000;
+
+/** Any ISO timestamp -> the same instant as IST wall-clock time, "YYYY-MM-DDTHH:mm:ss+05:30". */
+export function toIst(iso: string): string {
+  return new Date(Date.parse(iso) + IST_OFFSET_MS).toISOString().slice(0, 19) + "+05:30";
+}
+
+/** "2026-10-20" plus n days. */
+export function addDays(isoDate: string, n: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+/** Start (inclusive) and end (exclusive) of an IST day, shifted by n days, as ISO timestamps. */
+export function istDayRange(isoDate: string, n = 0): [string, string] {
+  return [`${addDays(isoDate, n)}T00:00:00+05:30`, `${addDays(isoDate, n + 1)}T00:00:00+05:30`];
 }
 
 /** "2026-10-20T10:12:00+05:30" -> "10:12" (the IST wall-clock time as stored) */

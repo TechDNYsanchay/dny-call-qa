@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getCall, getPerson, listCalls, listPeople, previousDayAverages } from "@/lib/data";
+import { CALLS, PEOPLE, PREVIOUS_DAYS } from "@/lib/data/sample-data";
 import { CallResultSchema } from "@/lib/scoring/schema";
 import { personDayReport, teamSummary } from "./reports";
 
-const calls = listCalls();
+const calls = [...CALLS].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+const getCall = (id: string) => CALLS.find((c) => c.id === id);
+const getPerson = (id: string) => PEOPLE.find((p) => p.id === id);
 
 describe("sample data", () => {
   it("every sample model result passes the scoring schema", () => {
@@ -53,7 +55,7 @@ describe("daily QA report", () => {
   });
 
   it("builds the founders' summary", () => {
-    const team = teamSummary(listPeople(), calls, previousDayAverages());
+    const team = teamSummary(PEOPLE, calls, PREVIOUS_DAYS);
     expect(team.redCalls.map((c) => c.id)).toEqual(["c-104"]);
     expect(team.vcsBooked).toBe(2);
     expect(team.proposalDatesFixed).toBe(1);

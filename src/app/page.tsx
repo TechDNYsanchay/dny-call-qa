@@ -1,19 +1,31 @@
 import Link from "next/link";
-import { BandBadge, Card, Chip, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getPerson, listCalls, listPeople, previousDayAverages, REPORT_DATE } from "@/lib/data";
+import { Suspense } from "react";
+import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
+import { getReportDay, listCalls, listPeople, previousDayAverages } from "@/lib/data";
 import { formatClock, formatDay, hardFailLabel } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
 
 export default function TeamPage() {
-  const calls = listCalls();
-  const team = teamSummary(listPeople(), calls, previousDayAverages());
+  return (
+    <Suspense fallback={<Loading what="team summary" />}>
+      <Team />
+    </Suspense>
+  );
+}
+
+async function Team() {
+  const day = await getReportDay();
+  if (!day) return <EmptyState title="Team summary" />;
+  const [people, calls, previous] = await Promise.all([listPeople(), listCalls(day), previousDayAverages(day)]);
+  const team = teamSummary(people, calls, previous);
   const scored = calls.filter((c) => c.final);
   const teamAverage = dayAverage(scored.map((c) => c.final!.score));
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "Unknown";
 
   return (
     <>
-      <PageHeader title="Team summary" subtitle={`Calls from ${formatDay(REPORT_DATE)} · sent to founders at 8 am`} />
+      <PageHeader title="Team summary" subtitle={`Calls from ${formatDay(day)} · sent to founders at 8 am`} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile label="Calls scored" value={scored.length} note={`of ${calls.length} logged`} />
@@ -94,7 +106,7 @@ export default function TeamPage() {
                 <li key={call.id} className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <Link href={`/calls/${call.id}`} className="font-medium hover:underline">
-                      {getPerson(call.personId)?.name} · {call.client.name}
+                      {nameOf(call.personId)} · {call.client.name}
                     </Link>
                     <div className="text-xs text-muted">
                       {formatClock(call.startedAt)} ·{" "}

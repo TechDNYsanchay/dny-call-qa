@@ -1,4 +1,4 @@
-// Sample data for building the screens before Callyzer, tl;dv and Supabase are connected.
+// Sample data: loaded into Supabase by scripts/sample-data.mts and used by the tests.
 // Names and calls are invented. Scores are not typed in: they are computed from the sample
 // model results with the real scoring code, exactly as live calls will be.
 
@@ -7,7 +7,6 @@ import type { CallMetrics } from "@/lib/scoring/metrics";
 import type { CallResult, Evidence, FirstCallResult, VisionCallResult } from "@/lib/scoring/schema";
 import type { CallRecord, Person } from "./types";
 
-export const IS_SAMPLE_DATA = true;
 export const REPORT_DATE = "2026-10-20";
 
 export const PEOPLE: Person[] = [

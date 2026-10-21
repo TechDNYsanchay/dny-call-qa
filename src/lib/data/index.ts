@@ -1,29 +1,173 @@
-// Data access for the screens. Reads sample data until Supabase is connected; the
-// function signatures are what the Supabase version will keep.
+// Data access for the screens, read from Supabase. Every function runs on the server only.
 
-import { CALLS, IS_SAMPLE_DATA, PEOPLE, PREVIOUS_DAYS, REPORT_DATE } from "./sample-data";
-import type { CallRecord, Person } from "./types";
+import "server-only";
+import { cache } from "react";
+import { istDayRange, toIst } from "@/lib/format";
+import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
+import { CallResultSchema } from "@/lib/scoring/schema";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import type { CallRecord, Person, PersonRole } from "./types";
 
 export type { CallRecord, Person } from "./types";
-export { IS_SAMPLE_DATA, REPORT_DATE };
 
-export function listPeople(): Person[] {
-  return PEOPLE;
+const TITLE: Record<PersonRole, string> = {
+  founder: "Founder",
+  manager: "Manager",
+  executive: "First Calls Executive",
+  consultant: "Lead Consultant, Sales",
+  admin: "Admin",
+};
+const SAMPLE_EMAIL_DOMAIN = "@sample.invalid";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const CALL_FIELDS = `
+  id, stream, person_id, started_at, duration_sec, recording_status, scoring_status, not_scored_reason,
+  leads ( name, city ),
+  call_metrics ( * ),
+  call_scores ( score, band, levels, hard_fails, overrides, result )
+`;
+
+function fail(what: string, error: { message: string }): never {
+  throw new Error(`${what}: ${error.message}`);
 }
 
-export function getPerson(id: string): Person | null {
-  return PEOPLE.find((p) => p.id === id) ?? null;
+export const listPeople = cache(async (): Promise<(Person & { email: string })[]> => {
+  const { data, error } = await supabaseAdmin()
+    .from("people")
+    .select("id, full_name, role, email")
+    .eq("active", true)
+    .order("role")
+    .order("full_name");
+  if (error) fail("people", error);
+  return data.map((p) => ({ id: p.id, name: p.full_name, role: p.role, title: TITLE[p.role], email: p.email }));
+});
+
+export async function getPerson(id: string): Promise<Person | null> {
+  return (await listPeople()).find((p) => p.id === id) ?? null;
 }
 
-/** Calls for the report day, earliest first. */
-export function listCalls(): CallRecord[] {
-  return [...CALLS].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+export const isSampleData = cache(async () => (await listPeople()).some((p) => p.email.endsWith(SAMPLE_EMAIL_DOMAIN)));
+
+/** The report covers the most recent IST day with calls; null before the first call arrives. */
+export const getReportDay = cache(async (): Promise<string | null> => {
+  const { data, error } = await supabaseAdmin().from("calls").select("started_at").order("started_at", { ascending: false }).limit(1);
+  if (error) fail("latest call", error);
+  return data[0] ? toIst(data[0].started_at).slice(0, 10) : null;
+});
+
+type CallRow = {
+  id: string;
+  stream: CallRecord["stream"];
+  person_id: string | null;
+  started_at: string;
+  duration_sec: number;
+  recording_status: CallRecord["recordingStatus"];
+  scoring_status: "not_eligible" | "ready" | "scored" | "failed";
+  not_scored_reason: string | null;
+  leads: { name: string | null; city: string | null } | null;
+  call_metrics: {
+    agent_talk_sec: number;
+    client_talk_sec: number;
+    client_share: number;
+    agent_share_first_half: number;
+    silences_over_8s: number;
+    longest_silence_sec: number;
+    credentials_sec: number;
+    service_share_of_agent: number;
+  } | null;
+  call_scores: { score: number; band: Band; levels: unknown; hard_fails: string[]; overrides: string[]; result: unknown } | null;
+  transcript_segments?: { role: string; start_sec: number; end_sec: number; text: string; topic: string | null }[];
+};
+
+function toCallRecord(row: CallRow): CallRecord {
+  const parsed = row.call_scores ? CallResultSchema.safeParse(row.call_scores.result) : null;
+  if (parsed && !parsed.success) console.error(`Call ${row.id}: stored result fails the schema`, parsed.error.issues.slice(0, 3));
+  const scored = row.call_scores && parsed?.success;
+  const m = row.call_metrics;
+  const agentShare = m ? 1 - Number(m.client_share) : 0;
+
+  return {
+    id: row.id,
+    stream: row.stream,
+    personId: row.person_id ?? "",
+    startedAt: toIst(row.started_at),
+    durationSec: row.duration_sec,
+    client: { name: row.leads?.name ?? "Unknown client", city: row.leads?.city ?? "" },
+    recordingStatus: row.recording_status,
+    transcript: (row.transcript_segments ?? []).map((s) => ({
+      role: s.role as CallRecord["transcript"][number]["role"],
+      startSec: Number(s.start_sec),
+      endSec: Number(s.end_sec),
+      text: s.text,
+      topic: (s.topic ?? undefined) as CallRecord["transcript"][number]["topic"],
+    })),
+    metrics: m
+      ? {
+          durationSec: row.duration_sec,
+          agentTalkSec: Number(m.agent_talk_sec),
+          clientTalkSec: Number(m.client_talk_sec),
+          clientShare: Number(m.client_share),
+          agentShareFirstHalf: Number(m.agent_share_first_half),
+          agentShareOverall: agentShare,
+          silencesOver8s: m.silences_over_8s,
+          longestSilenceSec: Number(m.longest_silence_sec),
+          credentialsSec: Number(m.credentials_sec),
+          serviceShareOfAgent: Number(m.service_share_of_agent),
+        }
+      : undefined,
+    result: scored ? parsed.data : undefined,
+    final: scored
+      ? {
+          score: Number(row.call_scores!.score),
+          band: row.call_scores!.band,
+          levels: row.call_scores!.levels as Record<string, Level>,
+          hardFails: row.call_scores!.hard_fails,
+          overrides: row.call_scores!.overrides,
+        }
+      : undefined,
+    notScored: row.scoring_status === "not_eligible" ? ((row.not_scored_reason ?? undefined) as NotScoredReason | undefined) : undefined,
+  };
 }
 
-export function getCall(id: string): CallRecord | null {
-  return CALLS.find((c) => c.id === id) ?? null;
+/** Calls on one IST day, earliest first. */
+export const listCalls = cache(async (day: string): Promise<CallRecord[]> => {
+  const [from, to] = istDayRange(day);
+  const { data, error } = await supabaseAdmin()
+    .from("calls")
+    .select(CALL_FIELDS)
+    .gte("started_at", from)
+    .lt("started_at", to)
+    .order("started_at");
+  if (error) fail("calls", error);
+  return (data as unknown as CallRow[]).map(toCallRecord);
+});
+
+export async function getCall(id: string): Promise<CallRecord | null> {
+  if (!UUID.test(id)) return null;
+  const { data, error } = await supabaseAdmin()
+    .from("calls")
+    .select(`${CALL_FIELDS}, transcript_segments ( idx, role, start_sec, end_sec, text, topic )`)
+    .eq("id", id)
+    .order("idx", { referencedTable: "transcript_segments" })
+    .maybeSingle();
+  if (error) fail("call", error);
+  return data ? toCallRecord(data as unknown as CallRow) : null;
 }
 
-export function previousDayAverages(): Record<string, number[]> {
-  return PREVIOUS_DAYS;
+/** Daily averages for the six days before `day`, oldest first, per person id. */
+export async function previousDayAverages(day: string): Promise<Record<string, number[]>> {
+  const [weekStart] = istDayRange(day, -6);
+  const { data, error } = await supabaseAdmin()
+    .from("daily_reports")
+    .select("person_id, report_date, summary")
+    .gte("report_date", weekStart.slice(0, 10))
+    .lt("report_date", day)
+    .order("report_date");
+  if (error) fail("daily reports", error);
+  const byPerson: Record<string, number[]> = {};
+  for (const r of data) {
+    const average = (r.summary as { average?: unknown } | null)?.average;
+    if (typeof average === "number") (byPerson[r.person_id] ??= []).push(average);
+  }
+  return byPerson;
 }
