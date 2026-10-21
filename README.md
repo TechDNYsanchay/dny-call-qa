@@ -5,6 +5,31 @@ Sales Call QA Agent for DNY Hospitality. It scores every first call (Callyzer) a
 - Tech plan: https://claude.ai/code/artifact/a95fd8dc-b9b9-45b6-a3d9-25fcdcfd720d
 - Stack: Next.js + Tailwind CSS on Vercel; Supabase (Postgres, Storage, Auth, Queues); nightly scoring through a Claude Code routine on Claude Max.
 
+## Run locally
+
+Needs Node.js 20.9 or later. The app runs on sample data until Supabase is connected.
+
+```bash
+npm install
+npm run dev -- -p 3100   # port 3000 is taken by another app on this machine
+npm test                 # scoring maths, schema, reports, webhook secrets
+npm run typecheck
+npm run lint
+```
+
+## What's where
+
+| Path | What it holds |
+| --- | --- |
+| `src/lib/scoring/` | The brief in code: call-sheet questions, scorecards and weights, hard fails, score maths and bands, measured rules, and the JSON schema the scoring routine must return |
+| `src/lib/reports.ts` | The daily QA report per person and the founders' team summary (brief section 6) |
+| `src/lib/data/` | Data access for the screens; sample data until Supabase is connected |
+| `src/app/` | Screens (team summary, calls, call page, daily report, scorecards) and API routes (Callyzer and tl;dv webhooks, scheduled jobs) |
+| `supabase/migrations/` | Database schema with row-level security and the restricted `scoring_agent` role |
+| `vercel.json` | Mumbai region and the scheduled jobs (UTC times) |
+
+This is Next.js 16 with Cache Components: read `AGENTS.md` before changing pages or routes.
+
 ## Repositories
 
 Every change is pushed separately to two private repositories:

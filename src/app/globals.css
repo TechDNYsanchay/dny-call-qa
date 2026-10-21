@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* Status colours (green / amber / red bands) always ship with a shape and a label, never colour alone. */
+:root {
+  --background: #fcfcfb;
+  --surface: #ffffff;
+  --foreground: #1c1c1a;
+  --muted: #6b6b65;
+  --border: #e5e4df;
+  --brand: #c23b2f;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+  --chart-muted: #b6b5ae;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1a1a19;
+    --surface: #222220;
+    --foreground: #ededeb;
+    --muted: #a3a39b;
+    --border: #36352f;
+    --brand: #e0574a;
+    --chart-muted: #64635c;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-brand: var(--brand);
+  --color-good: var(--status-good);
+  --color-warning: var(--status-warning);
+  --color-critical: var(--status-critical);
+  --color-chart-muted: var(--chart-muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

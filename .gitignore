@@ -1,23 +1,35 @@
 # dependencies
-node_modules/
+/node_modules
+/.pnp
+.pnp.*
 
-# Next.js / build
-.next/
-out/
-build/
-coverage/
+# testing
+/coverage
 
-# env files (keep the example)
-.env
-.env.*
-!.env.example
+# next.js
+/.next/
+/out/
 
-# Vercel / Supabase local state
-.vercel/
-supabase/.temp/
-supabase/.branches/
+# production
+/build
 
 # misc
 .DS_Store
+*.pem
 *.log
+
+# env files (keep the example)
+.env*
+!.env.example
+
+# vercel / supabase local state
+.vercel
+supabase/.temp/
+supabase/.branches/
+
+# typescript
 *.tsbuildinfo
+next-env.d.ts
+
+# local Claude Code preview config (machine-specific paths)
+.claude/launch.json
