@@ -1,26 +1,17 @@
 // Loads the sample calls into Supabase so the screens can be checked end to end, or removes them.
 // Sample rows are marked: people have @sample.invalid emails and leads have +91 90000 numbers.
+// Sample people get logins too, so sign-in and row-level security can be tested without real accounts.
 //
 //   npm run db:sample            load (safe to re-run; it upserts)
 //   npm run db:sample -- --remove
 
-import { createClient } from "@supabase/supabase-js";
-import type { Database, Json } from "../src/lib/supabase/database.types";
+import type { Json } from "../src/lib/supabase/database.types";
 import { CALLS, PEOPLE, PREVIOUS_DAYS, REPORT_DATE } from "../src/lib/data/sample-data";
 import { RUBRIC_VERSION } from "../src/lib/scoring/scorecards";
+import { db, deleteLogin, ensureLogin, must, SAMPLE_EMAIL_DOMAIN } from "./lib.mjs";
 
-const SAMPLE_EMAIL_DOMAIN = "sample.invalid";
 const SAMPLE_PHONE_PREFIX = "+9190000";
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SECRET_KEY;
-if (!url || !key) throw new Error("Run with --env-file=.env.local (NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY)");
-const db = createClient<Database>(url, key, { auth: { persistSession: false } });
-
-function must<T>(result: { data: T | null; error: { message: string } | null }, what: string): T {
-  if (result.error) throw new Error(`${what}: ${result.error.message}`);
-  return result.data as T;
-}
+const sampleEmail = (id: string) => `${id}@${SAMPLE_EMAIL_DOMAIN}`;
 
 /** REPORT_DATE minus n days, as YYYY-MM-DD. Scripts may use Date; pages may not. */
 function daysBefore(isoDate: string, n: number): string {
@@ -38,7 +29,9 @@ async function remove() {
   }
   const leads = must(await db.from("leads").delete().like("phone", `${SAMPLE_PHONE_PREFIX}%`).select("id"), "delete leads");
   must(await db.from("people").delete().like("email", `%@${SAMPLE_EMAIL_DOMAIN}`).select("id"), "delete people");
-  console.log(`Removed ${ids.length} sample people, their calls and reports, and ${leads.length} sample leads.`);
+  let logins = 0;
+  for (const p of PEOPLE) if (await deleteLogin(sampleEmail(p.id))) logins++;
+  console.log(`Removed ${ids.length} sample people, their calls and reports, ${leads.length} sample leads and ${logins} sample logins.`);
 }
 
 async function load() {
@@ -46,13 +39,16 @@ async function load() {
     await db
       .from("people")
       .upsert(
-        PEOPLE.map((p) => ({ full_name: p.name, email: `${p.id}@${SAMPLE_EMAIL_DOMAIN}`, role: p.role })),
+        await Promise.all(
+          // Sample logins can't receive email (.invalid); sign in as them with `npm run people -- test-link`.
+          PEOPLE.map(async (p) => ({ full_name: p.name, email: sampleEmail(p.id), role: p.role, auth_user_id: await ensureLogin(sampleEmail(p.id)) })),
+        ),
         { onConflict: "email" },
       )
       .select("id, email"),
     "upsert people",
   );
-  const personId = (sampleId: string) => people.find((p) => p.email === `${sampleId}@${SAMPLE_EMAIL_DOMAIN}`)!.id;
+  const personId = (sampleId: string) => people.find((p) => p.email === sampleEmail(sampleId))!.id;
 
   for (const [i, call] of CALLS.entries()) {
     const phone = `${SAMPLE_PHONE_PREFIX}${String(i + 1).padStart(5, "0")}`;

@@ -1,13 +1,41 @@
 import "server-only";
+import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 import type { Database } from "./database.types";
 
-// Server-side client with the secret key. It bypasses row-level security, so it must never
-// reach the browser ("server-only" makes that a build error). Once login is added, screens
-// switch to the signed-in user's client so RLS decides what each person sees.
+function env(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | "SUPABASE_SECRET_KEY"): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} must be set (see .env.example)`);
+  return value;
+}
+
+/**
+ * Acts as the signed-in person, so row-level security decides what they see. Screens use this.
+ * Server Components can read the session but not write cookies; the proxy refreshes sessions.
+ */
+export async function supabaseUser() {
+  const cookieStore = await cookies();
+  return createServerClient<Database>(env("NEXT_PUBLIC_SUPABASE_URL"), env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"), {
+    cookies: {
+      getAll: () => cookieStore.getAll(),
+      setAll: (cookiesToSet) => {
+        try {
+          for (const { name, value, options } of cookiesToSet) cookieStore.set(name, value, options);
+        } catch {
+          // Called from a Server Component: cookies are read-only there.
+        }
+      },
+    },
+  });
+}
+
+/**
+ * Secret-key client that bypasses row-level security. Only for trusted server code that is not
+ * acting for a viewer (the sign-in allowlist check, pipeline jobs). Never for rendering screens.
+ */
 export function supabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY must be set (see .env.example)");
-  return createClient<Database>(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createClient<Database>(env("NEXT_PUBLIC_SUPABASE_URL"), env("SUPABASE_SECRET_KEY"), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }

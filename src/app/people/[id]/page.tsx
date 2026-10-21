@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, Quote, StatTile } from "@/components/ui";
-import { getPerson, getReportDay, listCalls } from "@/lib/data";
+import { getPerson, getReportDay, listCalls, requireMe } from "@/lib/data";
 import { formatClock, formatDay } from "@/lib/format";
 import { personDayReport } from "@/lib/reports";
 
@@ -16,6 +16,7 @@ export default function PersonReportPage({ params }: PageProps<"/people/[id]">) 
 
 async function PersonReport({ params }: Pick<PageProps<"/people/[id]">, "params">) {
   const { id } = await params;
+  await requireMe();
   const person = await getPerson(id);
   if (!person) notFound();
   const day = await getReportDay();

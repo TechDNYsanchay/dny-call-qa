@@ -14,6 +14,7 @@ export const PEOPLE: Person[] = [
   { id: "rohan", name: "Rohan Mehta", role: "executive", title: "First Calls Executive" },
   { id: "neha", name: "Neha Kulkarni", role: "executive", title: "First Calls Executive" },
   { id: "kabir", name: "Kabir Shah", role: "consultant", title: "Lead Consultant, Sales" },
+  { id: "founder", name: "Sample Founder", role: "founder", title: "Founder" },
 ];
 
 /** Average score on the six days before REPORT_DATE, oldest first (sample only). */

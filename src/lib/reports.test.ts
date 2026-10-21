@@ -60,6 +60,7 @@ describe("daily QA report", () => {
     expect(team.vcsBooked).toBe(2);
     expect(team.proposalDatesFixed).toBe(1);
     expect(team.rows.every((r) => r.trend.length === 7)).toBe(true);
+    expect(team.rows.map((r) => r.report.person.id)).not.toContain("founder");
     expect(team.caseStudies).toEqual([{ name: "Kalaburagi hotel F&B", count: 1 }]);
   });
 });

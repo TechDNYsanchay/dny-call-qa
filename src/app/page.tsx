@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getReportDay, listCalls, listPeople, previousDayAverages } from "@/lib/data";
+import { getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
 import { formatClock, formatDay, hardFailLabel } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
@@ -15,6 +16,8 @@ export default function TeamPage() {
 }
 
 async function Team() {
+  const me = await requireMe();
+  if (!me.canSeeAll) redirect(`/people/${me.id}`);
   const day = await getReportDay();
   if (!day) return <EmptyState title="Team summary" />;
   const [people, calls, previous] = await Promise.all([listPeople(), listCalls(day), previousDayAverages(day)]);

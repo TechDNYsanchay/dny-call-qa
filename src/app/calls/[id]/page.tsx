@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { BandBadge, Card, Chip, Loading, PageHeader, Quote } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
-import { getCall, getPerson, type CallRecord } from "@/lib/data";
+import { getCall, getPerson, requireMe, type CallRecord } from "@/lib/data";
 import {
   formatClock,
   formatDay,
@@ -30,6 +30,8 @@ export default function CallPage({ params }: PageProps<"/calls/[id]">) {
 
 async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) {
   const { id } = await params;
+  await requireMe();
+  // Row-level security returns nothing for someone else's call, so it reads as not found.
   const call = await getCall(id);
   if (!call) notFound();
   const person = await getPerson(call.personId);

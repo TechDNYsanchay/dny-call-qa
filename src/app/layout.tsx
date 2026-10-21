@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
-import { getReportDay, isSampleData } from "@/lib/data";
+import { getCurrentPerson, getReportDay, isSampleData } from "@/lib/data";
 import { formatDay } from "@/lib/format";
 import "./globals.css";
 
@@ -21,12 +21,6 @@ export const metadata: Metadata = {
   description: "Daily QA scores and coaching for DNY Hospitality's sales calls",
 };
 
-const NAV = [
-  { href: "/", label: "Team" },
-  { href: "/calls", label: "Calls" },
-  { href: "/scorecards", label: "Scorecards" },
-] as const;
-
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
@@ -37,15 +31,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <span className="grid size-7 place-items-center rounded-md bg-brand text-xs font-bold text-white">DNY</span>
               Sales Agent
             </Link>
-            <nav className="flex gap-4 text-sm">
-              {NAV.map((item) => (
-                <Link key={item.href} href={item.href} className="text-muted hover:text-foreground">
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
             <Suspense fallback={null}>
-              <DayBadge />
+              <SignedInNav />
             </Suspense>
           </div>
         </header>
@@ -55,13 +42,48 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   );
 }
 
-async function DayBadge() {
+/** Navigation for the signed-in person; empty on the login page. */
+async function SignedInNav() {
+  const me = await getCurrentPerson();
+  if (!me) return null;
   const [day, sample] = await Promise.all([getReportDay(), isSampleData()]);
-  if (!day) return null;
+  const links = me.canSeeAll
+    ? [
+        { href: "/", label: "Team" },
+        { href: "/calls", label: "Calls" },
+        { href: "/scorecards", label: "Scorecards" },
+      ]
+    : [
+        { href: `/people/${me.id}`, label: "My report" },
+        { href: "/calls", label: "My calls" },
+        { href: "/scorecards", label: "Scorecards" },
+      ];
+
   return (
-    <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-medium ${sample ? "bg-warning/15" : "bg-background"}`}>
-      {sample ? "Sample data · " : "Calls from "}
-      {formatDay(day)}
-    </span>
+    <>
+      <nav className="flex gap-4 text-sm">
+        {links.map((item) => (
+          <Link key={item.href} href={item.href} className="text-muted hover:text-foreground">
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+      <div className="ml-auto flex items-center gap-3 text-xs">
+        {day && (
+          <span className={`rounded-full px-2.5 py-0.5 font-medium ${sample ? "bg-warning/15" : "bg-background"}`}>
+            {sample ? "Sample data · " : "Calls from "}
+            {formatDay(day)}
+          </span>
+        )}
+        <span className="text-muted" title={me.email}>
+          {me.name}
+        </span>
+        <form action="/auth/signout" method="post">
+          <button type="submit" className="text-muted underline-offset-2 hover:text-foreground hover:underline">
+            Sign out
+          </button>
+        </form>
+      </div>
+    </>
   );
 }

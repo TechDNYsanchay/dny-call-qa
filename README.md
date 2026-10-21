@@ -20,7 +20,20 @@ npm run db:sample -- --remove    # remove every sample row
 npm run db:types                 # regenerate src/lib/supabase/database.types.ts after a migration
 ```
 
-Sample rows are easy to tell apart: people have `@sample.invalid` emails and clients have `+91 90000…` numbers. Until login is added, the screens read with the server-side secret key, so the app must not be deployed publicly before then.
+Sample rows are easy to tell apart: people have `@sample.invalid` emails and clients have `+91 90000…` numbers.
+
+## Sign-in and access
+
+Everyone signs in with a one-time email link; there are no passwords and no open sign-ups. Only people on the team list can get a link:
+
+```bash
+npm run people -- list
+npm run people -- add --email name@dnyhospitality.com --name "Full Name" --role founder
+npm run people -- deactivate --email name@dnyhospitality.com
+npm run people -- test-link --email founder@sample.invalid   # sign in as a sample account (no email sent)
+```
+
+Founders, managers and admins see every call and report. Executives and consultants see only their own; the database enforces this with row-level security, not just the screens. The sign-in email template is `supabase/templates/magic_link.html` (pushed with `npx supabase config push`).
 
 ## What's where
 

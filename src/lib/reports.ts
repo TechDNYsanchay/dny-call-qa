@@ -120,8 +120,11 @@ export interface TeamSummary {
   caseStudies: { name: string; count: number }[];
 }
 
+/** Roles whose calls are scored; founders, managers and admins are readers, not rows. */
+const SCORED_ROLES: Person["role"][] = ["executive", "consultant"];
+
 export function teamSummary(people: Person[], calls: CallRecord[], previousDays: Record<string, number[]>): TeamSummary {
-  const rows = people.map((person) => {
+  const rows = people.filter((p) => SCORED_ROLES.includes(p.role)).map((person) => {
     const report = personDayReport(person, calls);
     return { report, trend: [...(previousDays[person.id] ?? []).slice(-6), report.average] };
   });

@@ -1,11 +1,13 @@
-// Data access for the screens, read from Supabase. Every function runs on the server only.
+// Data access for the screens, read from Supabase as the signed-in person, so row-level
+// security decides what each person sees. Every function runs on the server only.
 
 import "server-only";
+import { redirect } from "next/navigation";
 import { cache } from "react";
 import { istDayRange, toIst } from "@/lib/format";
 import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
 import { CallResultSchema } from "@/lib/scoring/schema";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { supabaseUser } from "@/lib/supabase/server";
 import type { CallRecord, Person, PersonRole } from "./types";
 
 export type { CallRecord, Person } from "./types";
@@ -31,8 +33,40 @@ function fail(what: string, error: { message: string }): never {
   throw new Error(`${what}: ${error.message}`);
 }
 
+/** Roles that see every call and every person's report. */
+const SEES_ALL: PersonRole[] = ["founder", "manager", "admin"];
+
+export interface Me extends Person {
+  email: string;
+  canSeeAll: boolean;
+}
+
+/** The signed-in person, or null when signed in but not (or no longer) on the team list. */
+export const getCurrentPerson = cache(async (): Promise<Me | null> => {
+  const supabase = await supabaseUser();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from("people")
+    .select("id, full_name, role, email")
+    .eq("auth_user_id", userId)
+    .eq("active", true)
+    .maybeSingle();
+  if (error) fail("current person", error);
+  if (!data) return null;
+  return { id: data.id, name: data.full_name, role: data.role, title: TITLE[data.role], email: data.email, canSeeAll: SEES_ALL.includes(data.role) };
+});
+
+/** For pages: the signed-in person, or sign out with a "no access" message. */
+export async function requireMe(): Promise<Me> {
+  const me = await getCurrentPerson();
+  if (!me) redirect("/auth/signout?reason=no-access");
+  return me;
+}
+
 export const listPeople = cache(async (): Promise<(Person & { email: string })[]> => {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await (await supabaseUser())
     .from("people")
     .select("id, full_name, role, email")
     .eq("active", true)
@@ -50,7 +84,7 @@ export const isSampleData = cache(async () => (await listPeople()).some((p) => p
 
 /** The report covers the most recent IST day with calls; null before the first call arrives. */
 export const getReportDay = cache(async (): Promise<string | null> => {
-  const { data, error } = await supabaseAdmin().from("calls").select("started_at").order("started_at", { ascending: false }).limit(1);
+  const { data, error } = await (await supabaseUser()).from("calls").select("started_at").order("started_at", { ascending: false }).limit(1);
   if (error) fail("latest call", error);
   return data[0] ? toIst(data[0].started_at).slice(0, 10) : null;
 });
@@ -132,7 +166,7 @@ function toCallRecord(row: CallRow): CallRecord {
 /** Calls on one IST day, earliest first. */
 export const listCalls = cache(async (day: string): Promise<CallRecord[]> => {
   const [from, to] = istDayRange(day);
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await (await supabaseUser())
     .from("calls")
     .select(CALL_FIELDS)
     .gte("started_at", from)
@@ -144,7 +178,7 @@ export const listCalls = cache(async (day: string): Promise<CallRecord[]> => {
 
 export async function getCall(id: string): Promise<CallRecord | null> {
   if (!UUID.test(id)) return null;
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await (await supabaseUser())
     .from("calls")
     .select(`${CALL_FIELDS}, transcript_segments ( idx, role, start_sec, end_sec, text, topic )`)
     .eq("id", id)
@@ -157,7 +191,7 @@ export async function getCall(id: string): Promise<CallRecord | null> {
 /** Daily averages for the six days before `day`, oldest first, per person id. */
 export async function previousDayAverages(day: string): Promise<Record<string, number[]>> {
   const [weekStart] = istDayRange(day, -6);
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await (await supabaseUser())
     .from("daily_reports")
     .select("person_id, report_date, summary")
     .gte("report_date", weekStart.slice(0, 10))

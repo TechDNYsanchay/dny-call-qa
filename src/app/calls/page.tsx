@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader } from "@/components/ui";
-import { getReportDay, listCalls, listPeople } from "@/lib/data";
+import { getReportDay, listCalls, listPeople, requireMe } from "@/lib/data";
 import { formatClock, formatDay, formatDuration, NOT_SCORED_LABEL, STREAM_LABEL } from "@/lib/format";
 
 export const metadata = { title: "Calls · DNY Sales Agent" };
@@ -15,13 +15,15 @@ export default function CallsPage() {
 }
 
 async function Calls() {
+  const me = await requireMe();
+  const title = me.canSeeAll ? "Calls" : "My calls";
   const day = await getReportDay();
-  if (!day) return <EmptyState title="Calls" />;
+  if (!day) return <EmptyState title={title} />;
   const [calls, people] = await Promise.all([listCalls(day), listPeople()]);
 
   return (
     <>
-      <PageHeader title="Calls" subtitle={`${calls.length} calls logged on ${formatDay(day)}`} />
+      <PageHeader title={title} subtitle={`${calls.length} calls logged on ${formatDay(day)}`} />
       <Card>
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
           <table className="w-full min-w-[680px] text-sm">
