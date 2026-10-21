@@ -34,4 +34,8 @@ export interface CallRecord {
   result?: CallResult;
   final?: FinalScore;
   notScored?: NotScoredReason;
+  /** Arrived and on its way to a score. */
+  inProgress?: "recording" | "transcription" | "scoring";
+  /** The executive's phone from Callyzer, kept for calls from numbers not on the team list. */
+  agentPhone?: string;
 }

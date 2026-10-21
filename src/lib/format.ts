@@ -61,6 +61,12 @@ export const NOT_SCORED_LABEL: Record<NotScoredReason, string> = {
   recording_pending: "Waiting for recording",
 };
 
+export const IN_PROGRESS_LABEL: Record<"recording" | "transcription" | "scoring", string> = {
+  recording: "Waiting for recording",
+  transcription: "Waiting for transcription",
+  scoring: "Waiting for tonight's scoring",
+};
+
 export function hardFailLabel(stream: Stream, id: string): string {
   return hardFailsFor(stream).find((f) => f.id === id)?.label ?? id;
 }

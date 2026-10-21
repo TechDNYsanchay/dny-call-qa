@@ -11,6 +11,7 @@ import {
   formatPct,
   formatTimestamp,
   hardFailLabel,
+  IN_PROGRESS_LABEL,
   NOT_SCORED_LABEL,
   STREAM_LABEL,
 } from "@/lib/format";
@@ -43,12 +44,12 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
       </Link>
       <PageHeader
         title={`${call.client.name} · ${call.client.city}`}
-        subtitle={`${STREAM_LABEL[call.stream]} by ${person?.name} · ${formatDay(call.startedAt)}, ${formatClock(call.startedAt)} · ${formatDuration(call.durationSec)}`}
+        subtitle={`${STREAM_LABEL[call.stream]} by ${person?.name ?? `a number not on the team list (${call.agentPhone ?? "unknown"})`} · ${formatDay(call.startedAt)}, ${formatClock(call.startedAt)} · ${formatDuration(call.durationSec)}`}
       >
         {call.final ? (
           <BandBadge score={call.final.score} band={call.final.band} />
         ) : (
-          <Chip>{call.notScored ? NOT_SCORED_LABEL[call.notScored] : "Not scored"}</Chip>
+          <Chip>{call.notScored ? NOT_SCORED_LABEL[call.notScored] : call.inProgress ? IN_PROGRESS_LABEL[call.inProgress] : "Not scored"}</Chip>
         )}
       </PageHeader>
 

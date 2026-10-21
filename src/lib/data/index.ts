@@ -23,7 +23,7 @@ const SAMPLE_EMAIL_DOMAIN = "@sample.invalid";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CALL_FIELDS = `
-  id, stream, person_id, started_at, duration_sec, recording_status, scoring_status, not_scored_reason,
+  id, stream, person_id, agent_phone, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
   leads ( name, city ),
   call_metrics ( * ),
   call_scores ( score, band, levels, hard_fails, overrides, result )
@@ -93,10 +93,12 @@ type CallRow = {
   id: string;
   stream: CallRecord["stream"];
   person_id: string | null;
+  agent_phone: string | null;
   started_at: string;
   duration_sec: number;
   recording_status: CallRecord["recordingStatus"];
-  scoring_status: "not_eligible" | "ready" | "scored" | "failed";
+  transcript_status: "not_needed" | "pending" | "processing" | "done" | "failed";
+  scoring_status: "not_eligible" | "waiting" | "ready" | "scored" | "failed";
   not_scored_reason: string | null;
   leads: { name: string | null; city: string | null } | null;
   call_metrics: {
@@ -160,6 +162,15 @@ function toCallRecord(row: CallRow): CallRecord {
         }
       : undefined,
     notScored: row.scoring_status === "not_eligible" ? ((row.not_scored_reason ?? undefined) as NotScoredReason | undefined) : undefined,
+    inProgress:
+      row.scoring_status === "waiting" || row.scoring_status === "ready"
+        ? row.recording_status === "pending"
+          ? "recording"
+          : row.transcript_status === "done"
+            ? "scoring"
+            : "transcription"
+        : undefined,
+    agentPhone: row.agent_phone ?? undefined,
   };
 }
 

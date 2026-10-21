@@ -151,6 +151,8 @@ export type Database = {
       }
       calls: {
         Row: {
+          agent_phone: string | null
+          call_direction: string | null
           client_email: string | null
           client_phone: string | null
           created_at: string
@@ -161,6 +163,7 @@ export type Database = {
           not_scored_reason: string | null
           person_id: string | null
           recording_path: string | null
+          recording_source_url: string | null
           recording_status: Database["public"]["Enums"]["recording_status"]
           scoring_status: Database["public"]["Enums"]["scoring_status"]
           source: Database["public"]["Enums"]["call_source"]
@@ -170,6 +173,8 @@ export type Database = {
           transcript_status: Database["public"]["Enums"]["transcript_status"]
         }
         Insert: {
+          agent_phone?: string | null
+          call_direction?: string | null
           client_email?: string | null
           client_phone?: string | null
           created_at?: string
@@ -180,6 +185,7 @@ export type Database = {
           not_scored_reason?: string | null
           person_id?: string | null
           recording_path?: string | null
+          recording_source_url?: string | null
           recording_status?: Database["public"]["Enums"]["recording_status"]
           scoring_status?: Database["public"]["Enums"]["scoring_status"]
           source: Database["public"]["Enums"]["call_source"]
@@ -189,6 +195,8 @@ export type Database = {
           transcript_status?: Database["public"]["Enums"]["transcript_status"]
         }
         Update: {
+          agent_phone?: string | null
+          call_direction?: string | null
           client_email?: string | null
           client_phone?: string | null
           created_at?: string
@@ -199,6 +207,7 @@ export type Database = {
           not_scored_reason?: string | null
           person_id?: string | null
           recording_path?: string | null
+          recording_source_url?: string | null
           recording_status?: Database["public"]["Enums"]["recording_status"]
           scoring_status?: Database["public"]["Enums"]["scoring_status"]
           source?: Database["public"]["Enums"]["call_source"]
@@ -484,7 +493,7 @@ export type Database = {
         | "case_studies"
         | "brief"
       score_band: "green" | "amber" | "red"
-      scoring_status: "not_eligible" | "ready" | "scored" | "failed"
+      scoring_status: "not_eligible" | "waiting" | "ready" | "scored" | "failed"
       transcript_status:
         | "not_needed"
         | "pending"
@@ -639,7 +648,7 @@ export const Constants = {
         "brief",
       ],
       score_band: ["green", "amber", "red"],
-      scoring_status: ["not_eligible", "ready", "scored", "failed"],
+      scoring_status: ["not_eligible", "waiting", "ready", "scored", "failed"],
       transcript_status: [
         "not_needed",
         "pending",

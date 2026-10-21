@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader } from "@/components/ui";
 import { getReportDay, listCalls, listPeople, requireMe } from "@/lib/data";
-import { formatClock, formatDay, formatDuration, NOT_SCORED_LABEL, STREAM_LABEL } from "@/lib/format";
+import { formatClock, formatDay, formatDuration, IN_PROGRESS_LABEL, NOT_SCORED_LABEL, STREAM_LABEL } from "@/lib/format";
 
 export const metadata = { title: "Calls · DNY Sales Agent" };
 
@@ -45,7 +45,11 @@ async function Calls() {
                       {formatClock(call.startedAt)}
                     </Link>
                   </td>
-                  <td className="px-2 py-3">{people.find((p) => p.id === call.personId)?.name}</td>
+                  <td className="px-2 py-3">
+                    {people.find((p) => p.id === call.personId)?.name ?? (
+                      <span className="text-muted">Not on the team list{call.agentPhone ? ` (${call.agentPhone})` : ""}</span>
+                    )}
+                  </td>
                   <td className="px-2 py-3 text-muted">{STREAM_LABEL[call.stream]}</td>
                   <td className="px-2 py-3">
                     {call.client.name}
@@ -56,7 +60,9 @@ async function Calls() {
                     {call.final ? (
                       <BandBadge score={call.final.score} band={call.final.band} />
                     ) : (
-                      <Chip>{call.notScored ? NOT_SCORED_LABEL[call.notScored] : "Not scored"}</Chip>
+                      <Chip>
+                        {call.notScored ? NOT_SCORED_LABEL[call.notScored] : call.inProgress ? IN_PROGRESS_LABEL[call.inProgress] : "Not scored"}
+                      </Chip>
                     )}
                   </td>
                 </tr>
