@@ -245,7 +245,8 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 # Sign-in link: token_hash works on any device (the default code link only works in the
-# browser that asked for it).
+# browser that asked for it). It returns to {{ .RedirectTo }}, the /auth/callback of whichever site
+# asked (localhost or Vercel), which must be listed in additional_redirect_urls.
 [auth.email.template.magic_link]
 subject = "Your DNY Sales Agent sign-in link"
 content_path = "./supabase/templates/magic_link.html"
