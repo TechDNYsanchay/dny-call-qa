@@ -8,3 +8,7 @@ node_modules
 coverage
 supabase/.temp
 supabase/.branches
+
+# editor swap and lock files
+*.swp
+.*.swp
