@@ -13,3 +13,4 @@ supabase/.branches
 *.swp
 .*.swp
 stt-compare/
+imports/
