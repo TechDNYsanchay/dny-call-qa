@@ -7,6 +7,7 @@ describe("public paths", () => {
     expect(isPublicPath("/auth/callback")).toBe(true);
     expect(isPublicPath("/api/webhooks/callyzer")).toBe(true);
     expect(isPublicPath("/api/cron/sweep")).toBe(true);
+    expect(isPublicPath("/api/scoring/next")).toBe(true);
   });
 
   it("protects every screen", () => {

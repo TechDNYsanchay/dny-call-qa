@@ -9,7 +9,9 @@ export function isPublicPath(pathname: string): boolean {
     pathname === "/login" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/webhooks/") ||
-    pathname.startsWith("/api/cron/")
+    pathname.startsWith("/api/cron/") ||
+    // The scoring routine authenticates with its own token, not a sign-in.
+    pathname.startsWith("/api/scoring/")
   );
 }
 

@@ -6,14 +6,17 @@ hard fails and result format live in code; this guide is how to judge them consi
 
 ## Steps
 
-1. `npm run score -- next --call <callId> > <package.json>` gives the call, the measured facts
-   (talk seconds per speaker label, silences), the rubric and the transcript as `[m:ss] label: text`.
-2. Write the result as JSON matching `FirstCallResultSchema` in `src/lib/scoring/schema.ts`.
-3. `npm run score -- save <callId> <result.json> --dry-run` checks it: the schema, every expected
-   question, speaker labels, and that every quote is in the transcript. It prints the score and the
-   measured client talk share. Fix and re-run until it passes.
-4. Make any percentage you mention in a reason match the dry run's "client talked N%".
-5. Only save for real (`save` without `--dry-run`) when asked to.
+By hand: `npm run score -- next|save|skip` (scripts/score.mts). The nightly routine does the same
+through the scoring API (`/api/scoring/next`, `save?callId=…&dryRun=1`, `save?callId=…`, `skip?callId=…`).
+
+1. Get the next call: the call, the measured facts (talk seconds per speaker label, silences), the
+   rubric and the transcript as `[m:ss] label: text`.
+2. Write the result as JSON in the shape below (`FirstCallResultSchema` in `src/lib/scoring/schema.ts`).
+3. Dry-run it. The check covers the schema, every expected question, speaker labels, and that every
+   quote is in the transcript, and returns the score and the measured client talk share. Fix and
+   repeat until it passes.
+4. Make any percentage you mention in a reason match the dry run's client talk share.
+5. Save it.
 
 ## Not a sales call
 
