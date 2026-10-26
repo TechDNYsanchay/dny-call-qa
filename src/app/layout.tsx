@@ -73,7 +73,7 @@ async function SignedInNav() {
       <div className="ml-auto flex items-center gap-3 text-xs">
         {day && (
           <span className={`rounded-full px-2.5 py-0.5 font-medium ${sample ? "bg-warning/15" : "bg-background"}`}>
-            {sample ? "Sample data · " : "Calls from "}
+            {sample ? "Sample data · " : "Latest calls: "}
             {formatDay(day)}
           </span>
         )}

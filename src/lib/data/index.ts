@@ -4,7 +4,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { istDayRange, toIst } from "@/lib/format";
+import { formatPhone, istDayRange, toIst } from "@/lib/format";
 import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
 import { CallResultSchema } from "@/lib/scoring/schema";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
@@ -23,7 +23,7 @@ const SAMPLE_EMAIL_DOMAIN = "@sample.invalid";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CALL_FIELDS = `
-  id, stream, person_id, agent_phone, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
+  id, stream, person_id, agent_phone, client_phone, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
   leads ( name, city ),
   call_metrics ( * ),
   call_scores ( score, band, levels, hard_fails, overrides, result )
@@ -95,6 +95,7 @@ type CallRow = {
   stream: CallRecord["stream"];
   person_id: string | null;
   agent_phone: string | null;
+  client_phone: string | null;
   started_at: string;
   duration_sec: number;
   recording_status: CallRecord["recordingStatus"];
@@ -130,7 +131,8 @@ function toCallRecord(row: CallRow): CallRecord {
     personId: row.person_id ?? "",
     startedAt: toIst(row.started_at),
     durationSec: row.duration_sec,
-    client: { name: row.leads?.name ?? "Unknown client", city: row.leads?.city ?? "" },
+    // Callyzer rarely knows the client's name, so the number stands in until scoring captures it.
+    client: { name: row.leads?.name ?? (row.client_phone ? formatPhone(row.client_phone) : "Unknown client"), city: row.leads?.city ?? "" },
     recordingStatus: row.recording_status,
     transcript: (row.transcript_segments ?? []).map((s) => ({
       speaker: s.speaker_label,
@@ -178,6 +180,27 @@ function toCallRecord(row: CallRow): CallRecord {
     agentPhone: row.agent_phone ?? undefined,
   };
 }
+
+/**
+ * The nearest earlier and later IST days with calls, for the day buttons. Executives only see
+ * their own calls (row-level security), so their buttons skip days they made no calls.
+ */
+export const getAdjacentDays = cache(async (day: string, personId?: string): Promise<{ previous: string | null; next: string | null }> => {
+  const [from, to] = istDayRange(day);
+  const supabase = await supabaseUser();
+  const calls = () => {
+    const query = supabase.from("calls").select("started_at");
+    return personId ? query.eq("person_id", personId) : query;
+  };
+  const [before, after] = await Promise.all([
+    calls().lt("started_at", from).order("started_at", { ascending: false }).limit(1),
+    calls().gte("started_at", to).order("started_at").limit(1),
+  ]);
+  if (before.error) fail("earlier day", before.error);
+  if (after.error) fail("later day", after.error);
+  const istDay = (rows: { started_at: string }[]) => (rows[0] ? toIst(rows[0].started_at).slice(0, 10) : null);
+  return { previous: istDay(before.data), next: istDay(after.data) };
+});
 
 /** Calls on one IST day, earliest first. */
 export const listCalls = cache(async (day: string): Promise<CallRecord[]> => {

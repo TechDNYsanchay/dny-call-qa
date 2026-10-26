@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, formatClock, formatDay, formatTimestamp, istDayRange, toIst } from "./format";
+import { addDays, formatClock, formatDay, formatPhone, formatShortDay, formatTimestamp, istDayRange, parseDayParam, toIst } from "./format";
 
 describe("IST dates", () => {
   it("converts UTC timestamps from Supabase to IST wall-clock time", () => {
@@ -22,5 +22,20 @@ describe("IST dates", () => {
     expect(formatClock("2026-10-20T10:12:00+05:30")).toBe("10:12");
     expect(formatTimestamp(3125)).toBe("52:05");
     expect(formatTimestamp(3725)).toBe("1:02:05");
+  });
+});
+
+describe("day buttons and phone numbers", () => {
+  it("reads ?day= only when it's a date", () => {
+    expect(parseDayParam("2026-10-23")).toBe("2026-10-23");
+    expect(parseDayParam("23-10-2026")).toBeNull();
+    expect(parseDayParam(["2026-10-23"])).toBeNull();
+    expect(parseDayParam(undefined)).toBeNull();
+  });
+
+  it("formats short days and Indian numbers", () => {
+    expect(formatShortDay("2026-10-05")).toBe("5 Oct");
+    expect(formatPhone("+919876543210")).toBe("+91 98765 43210");
+    expect(formatPhone("+14155550100")).toBe("+14155550100");
   });
 });

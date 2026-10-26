@@ -1,41 +1,49 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, Quote, StatTile } from "@/components/ui";
-import { getPerson, getReportDay, listCalls, requireMe } from "@/lib/data";
-import { formatClock, formatDay } from "@/lib/format";
+import { getAdjacentDays, getPerson, getReportDay, listCalls, requireMe } from "@/lib/data";
+import { formatClock, formatDay, parseDayParam } from "@/lib/format";
 import { personDayReport } from "@/lib/reports";
 
-export default function PersonReportPage({ params }: PageProps<"/people/[id]">) {
+export default function PersonReportPage({ params, searchParams }: PageProps<"/people/[id]">) {
   return (
     <Suspense fallback={<Loading what="report" />}>
-      <PersonReport params={params} />
+      <PersonReport params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function PersonReport({ params }: Pick<PageProps<"/people/[id]">, "params">) {
+async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[id]">, "params" | "searchParams">) {
   const { id } = await params;
-  await requireMe();
+  const me = await requireMe();
   const person = await getPerson(id);
   if (!person) notFound();
-  const day = await getReportDay();
+  const latest = await getReportDay();
+  const day = parseDayParam((await searchParams).day) ?? latest;
   if (!day) return <EmptyState title={`${person.name}: daily QA report`} />;
-  const report = personDayReport(person, await listCalls(day));
+  const [calls, around] = await Promise.all([listCalls(day), getAdjacentDays(day, person.id)]);
+  const report = personDayReport(person, calls);
 
   return (
     <>
-      <Link href="/" className="mb-3 inline-block text-sm text-muted hover:text-foreground">
-        ← Team
-      </Link>
+      {me.canSeeAll && (
+        <Link href={day === latest ? "/" : `/?day=${day}`} className="mb-3 inline-block text-sm text-muted hover:text-foreground">
+          ← Team
+        </Link>
+      )}
       <PageHeader
         title={`${person.name}: daily QA report`}
         subtitle={`${person.title} · calls from ${formatDay(day)} · emailed at 8 am`}
       >
-        {report.average !== null && report.band && <BandBadge score={report.average} band={report.band} />}
+        <div className="flex flex-wrap items-center gap-3">
+          {report.average !== null && report.band && <BandBadge score={report.average} band={report.band} />}
+          <DayNav path={`/people/${person.id}`} day={day} latest={latest} {...around} />
+        </div>
       </PageHeader>
 
-      <h2 className="mb-3 text-sm font-semibold">Yesterday in numbers</h2>
+      <h2 className="mb-3 text-sm font-semibold">The day in numbers</h2>
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Calls reviewed" value={report.scored.length} note={`${report.totalMinutes} min across ${report.calls.length} calls`} />
         <StatTile label="Hard fails" value={report.hardFailCalls} />
@@ -126,7 +134,7 @@ async function PersonReport({ params }: Pick<PageProps<"/people/[id]">, "params"
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Tomorrow's one thing">
-          <p className="text-sm">{report.tomorrow ?? "No scored calls yesterday."}</p>
+          <p className="text-sm">{report.tomorrow ?? "No scored calls that day."}</p>
         </Card>
         <Card title="Best call of the day">
           {report.bestCall ? (

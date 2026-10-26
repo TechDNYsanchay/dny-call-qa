@@ -39,11 +39,11 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
 
   return (
     <>
-      <Link href="/calls" className="mb-3 inline-block text-sm text-muted hover:text-foreground">
-        ← All calls
+      <Link href={`/calls?day=${call.startedAt.slice(0, 10)}`} className="mb-3 inline-block text-sm text-muted hover:text-foreground">
+        ← Calls on {formatDay(call.startedAt)}
       </Link>
       <PageHeader
-        title={`${call.client.name} · ${call.client.city}`}
+        title={call.client.city ? `${call.client.name} · ${call.client.city}` : call.client.name}
         subtitle={`${STREAM_LABEL[call.stream]} by ${person?.name ?? `a number not on the team list (${call.agentPhone ?? "unknown"})`} · ${formatDay(call.startedAt)}, ${formatClock(call.startedAt)} · ${formatDuration(call.durationSec)}`}
       >
         {call.final ? (

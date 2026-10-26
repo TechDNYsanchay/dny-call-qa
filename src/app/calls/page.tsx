@@ -1,29 +1,33 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader } from "@/components/ui";
-import { getReportDay, listCalls, listPeople, requireMe } from "@/lib/data";
-import { formatClock, formatDay, formatDuration, IN_PROGRESS_LABEL, NOT_SCORED_LABEL, STREAM_LABEL } from "@/lib/format";
+import { getAdjacentDays, getReportDay, listCalls, listPeople, requireMe } from "@/lib/data";
+import { formatClock, formatDay, formatDuration, IN_PROGRESS_LABEL, NOT_SCORED_LABEL, parseDayParam, STREAM_LABEL } from "@/lib/format";
 
 export const metadata = { title: "Calls · DNY Sales Agent" };
 
-export default function CallsPage() {
+export default function CallsPage({ searchParams }: PageProps<"/calls">) {
   return (
     <Suspense fallback={<Loading what="calls" />}>
-      <Calls />
+      <Calls searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Calls() {
+async function Calls({ searchParams }: Pick<PageProps<"/calls">, "searchParams">) {
   const me = await requireMe();
   const title = me.canSeeAll ? "Calls" : "My calls";
-  const day = await getReportDay();
+  const latest = await getReportDay();
+  const day = parseDayParam((await searchParams).day) ?? latest;
   if (!day) return <EmptyState title={title} />;
-  const [calls, people] = await Promise.all([listCalls(day), listPeople()]);
+  const [calls, people, around] = await Promise.all([listCalls(day), listPeople(), getAdjacentDays(day)]);
 
   return (
     <>
-      <PageHeader title={title} subtitle={`${calls.length} calls logged on ${formatDay(day)}`} />
+      <PageHeader title={title} subtitle={`${calls.length} calls logged on ${formatDay(day)}`}>
+        <DayNav path="/calls" day={day} latest={latest} {...around} />
+      </PageHeader>
       <Card>
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
           <table className="w-full min-w-[680px] text-sm">
@@ -53,7 +57,7 @@ async function Calls() {
                   <td className="px-2 py-3 text-muted">{STREAM_LABEL[call.stream]}</td>
                   <td className="px-2 py-3">
                     {call.client.name}
-                    <span className="text-muted"> · {call.client.city}</span>
+                    {call.client.city && <span className="text-muted"> · {call.client.city}</span>}
                   </td>
                   <td className="px-2 py-3 text-right tabular-nums">{formatDuration(call.durationSec)}</td>
                   <td className="px-4 py-3 sm:px-5">
@@ -67,6 +71,13 @@ async function Calls() {
                   </td>
                 </tr>
               ))}
+              {calls.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted sm:px-5">
+                    No calls logged on this day.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

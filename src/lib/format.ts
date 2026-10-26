@@ -14,6 +14,22 @@ export function formatDay(isoDate: string): string {
   return `${Number(d)} ${MONTHS.at(Number(m) - 1)} ${y}`;
 }
 
+/** "2026-10-20" -> "20 Oct" */
+export function formatShortDay(isoDate: string): string {
+  return formatDay(isoDate).replace(/ \d{4}$/, "");
+}
+
+/** A page's ?day=YYYY-MM-DD, or null when it's missing or malformed. */
+export function parseDayParam(value: string | string[] | undefined): string | null {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+/** "+919876543210" -> "+91 98765 43210"; other numbers unchanged. */
+export function formatPhone(phone: string): string {
+  const indian = phone.match(/^\+91(\d{5})(\d{5})$/);
+  return indian ? `+91 ${indian[1]} ${indian[2]}` : phone;
+}
+
 const IST_OFFSET_MS = 330 * 60_000;
 
 /** Any ISO timestamp -> the same instant as IST wall-clock time, "YYYY-MM-DDTHH:mm:ss+05:30". */

@@ -1,26 +1,29 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
-import { formatClock, formatDay, hardFailLabel } from "@/lib/format";
+import { getAdjacentDays, getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
+import { formatClock, formatDay, hardFailLabel, parseDayParam } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
 
-export default function TeamPage() {
+export default function TeamPage({ searchParams }: PageProps<"/">) {
   return (
     <Suspense fallback={<Loading what="team summary" />}>
-      <Team />
+      <Team searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Team() {
+async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const me = await requireMe();
-  if (!me.canSeeAll) redirect(`/people/${me.id}`);
-  const day = await getReportDay();
+  const requested = parseDayParam((await searchParams).day);
+  if (!me.canSeeAll) redirect(`/people/${me.id}${requested ? `?day=${requested}` : ""}`);
+  const latest = await getReportDay();
+  const day = requested ?? latest;
   if (!day) return <EmptyState title="Team summary" />;
-  const [people, calls, previous] = await Promise.all([listPeople(), listCalls(day), previousDayAverages(day)]);
+  const [people, calls, previous, around] = await Promise.all([listPeople(), listCalls(day), previousDayAverages(day), getAdjacentDays(day)]);
   const team = teamSummary(people, calls, previous);
   const scored = calls.filter((c) => c.final);
   const teamAverage = dayAverage(scored.map((c) => c.final!.score));
@@ -28,7 +31,9 @@ async function Team() {
 
   return (
     <>
-      <PageHeader title="Team summary" subtitle={`Calls from ${formatDay(day)} · sent to founders at 8 am`} />
+      <PageHeader title="Team summary" subtitle={`Calls from ${formatDay(day)} · sent to founders at 8 am`}>
+        <DayNav path="/" day={day} latest={latest} {...around} />
+      </PageHeader>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile label="Calls scored" value={scored.length} note={`of ${calls.length} logged`} />
@@ -87,7 +92,7 @@ async function Team() {
                       <span className="text-muted">{conversion.label}:</span> {conversion.value}
                     </td>
                     <td className="px-4 py-3 text-right sm:px-5">
-                      <Link href={`/people/${report.person.id}`} className="text-sm font-medium text-brand hover:underline">
+                      <Link href={day === latest ? `/people/${report.person.id}` : `/people/${report.person.id}?day=${day}`} className="text-sm font-medium text-brand hover:underline">
                         Report
                       </Link>
                     </td>
