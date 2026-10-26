@@ -93,7 +93,11 @@ function ScoredCall({ call }: { call: CallRecord }) {
                   return (
                     <li key={id}>
                       <div className="text-sm font-medium">{hardFailLabel(call.stream, id)}</div>
-                      {judged?.evidence.map((e, i) => <Quote key={i} evidence={e} />)}
+                      {judged?.evidence.map((e, i) => (
+                        <div key={i}>
+                          <Quote evidence={e} />
+                        </div>
+                      ))}
                     </li>
                   );
                 })}
