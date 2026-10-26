@@ -18,6 +18,10 @@
       "schedule": "0 19 * * *"
     },
     {
+      "path": "/api/cron/tldv-sync",
+      "schedule": "20 19 * * *"
+    },
+    {
       "path": "/api/cron/build-reports",
       "schedule": "30 0 * * *"
     },

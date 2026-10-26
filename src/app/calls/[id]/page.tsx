@@ -44,7 +44,7 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
       </Link>
       <PageHeader
         title={call.client.city ? `${call.client.name} · ${call.client.city}` : call.client.name}
-        subtitle={`${STREAM_LABEL[call.stream]} by ${person?.name ?? `a number not on the team list (${call.agentPhone ?? "unknown"})`} · ${formatDay(call.startedAt)}, ${formatClock(call.startedAt)} · ${formatDuration(call.durationSec)}`}
+        subtitle={`${STREAM_LABEL[call.stream]} by ${person?.name ?? (call.stream === "vision_call" ? "a consultant not on the team list" : `a number not on the team list (${call.agentPhone ?? "unknown"})`)} · ${formatDay(call.startedAt)}, ${formatClock(call.startedAt)} · ${formatDuration(call.durationSec)}`}
       >
         {call.final ? (
           <BandBadge score={call.final.score} band={call.final.band} />
@@ -55,6 +55,7 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
 
       <RecordingPlayer
         url={call.recordingUrl}
+        pageUrl={call.recordingPageUrl}
         fallback={
           call.recordingStatus === "available"
             ? "The recording couldn't be loaded. Refresh the page to try again."

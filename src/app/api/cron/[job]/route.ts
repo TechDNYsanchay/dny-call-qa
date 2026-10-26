@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { addDays, toIst } from "@/lib/format";
 import { syncCallyzer } from "@/lib/ingest/callyzer-api";
+import { syncTldv } from "@/lib/ingest/tldv";
 import { transcribePending } from "@/lib/ingest/transcribe";
 import { TranscriberNotConfigured } from "@/lib/transcription";
 import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
@@ -15,6 +16,7 @@ const JOBS = {
   "callyzer-sync": "Every 15 minutes, 08:30-23:30 IST: pull today's Callyzer calls and copy new recordings",
   transcribe: "Every 15 minutes, 08:37-01:22 IST: transcribe stored recordings, oldest first",
   sweep: "00:30 IST: pull yesterday's and today's Callyzer calls to catch anything missed",
+  "tldv-sync": "00:50 IST: store tl;dv meetings from the last 3 days that the webhook missed",
   "build-reports": "06:00 IST: flag unscored calls, write capture fields to leads, build reports",
   "send-reports": "08:00 IST: send each person's QA report and the founders' summary",
 } as const;
@@ -35,6 +37,11 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
   try {
     if (job === "transcribe") {
       return Response.json({ job, ...(await transcribePending(TRANSCRIBE_BUDGET_MS)) });
+    }
+    if (job === "tldv-sync") {
+      if (!process.env.TLDV_API_KEY) return Response.json({ job, done: false, note: "TLDV_API_KEY is not set" }, { status: 202 });
+      const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      return Response.json({ job, since, ...(await syncTldv(since)) });
     }
     if (job === "sweep") {
       return Response.json({ job, ...(await syncCallyzer(addDays(today, -1), today)) });

@@ -108,6 +108,8 @@ type CallRow = {
   duration_sec: number;
   recording_status: CallRecord["recordingStatus"];
   recording_path?: string | null;
+  source?: string;
+  recording_source_url?: string | null;
   transcript_status: "not_needed" | "pending" | "processing" | "done" | "failed";
   scoring_status: "not_eligible" | "waiting" | "ready" | "scored" | "failed";
   not_scored_reason: string | null;
@@ -232,14 +234,19 @@ export async function getCall(id: string): Promise<CallRecord | null> {
   if (!UUID.test(id)) return null;
   const { data, error } = await (await supabaseUser())
     .from("calls")
-    .select(`${CALL_FIELDS}, recording_path, transcript_segments ( idx, speaker_label, role, start_sec, end_sec, text, topic )`)
+    .select(`${CALL_FIELDS}, recording_path, source, recording_source_url, transcript_segments ( idx, speaker_label, role, start_sec, end_sec, text, topic )`)
     .eq("id", id)
     .order("idx", { referencedTable: "transcript_segments" })
     .maybeSingle();
   if (error) fail("call", error);
   if (!data) return null;
   const row = data as unknown as CallRow;
-  return { ...toCallRecord(row), recordingUrl: await recordingLink(row) };
+  return {
+    ...toCallRecord(row),
+    recordingUrl: await recordingLink(row),
+    // tl;dv keeps vision-call recordings; the call links to the meeting there.
+    recordingPageUrl: row.source === "tldv" ? (row.recording_source_url ?? undefined) : undefined,
+  };
 }
 
 /**

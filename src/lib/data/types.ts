@@ -35,6 +35,8 @@ export interface CallRecord {
   recordingStatus: RecordingStatus;
   /** Short-lived link to play the stored recording (call page only). */
   recordingUrl?: string;
+  /** Where the recording lives when DNY doesn't store it, e.g. the meeting's page in tl;dv. */
+  recordingPageUrl?: string;
   transcript: TranscriptLine[];
   metrics?: CallMetrics;
   result?: CallResult;
