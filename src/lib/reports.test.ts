@@ -64,3 +64,16 @@ describe("daily QA report", () => {
     expect(team.caseStudies).toEqual([{ name: "Kalaburagi hotel F&B", count: 1 }]);
   });
 });
+
+describe("missed questions", () => {
+  it("counts only mandatory questions, not good-to-have ones", () => {
+    const scored = calls.find((c) => c.final && c.result?.stream === "first_call")!;
+    const call = structuredClone(scored);
+    call.result!.coverage = [
+      { question: "fc07", status: "missed", evidence: [] },
+      { question: "fc09", status: "missed", evidence: [] },
+    ];
+    const report = personDayReport(getPerson(call.personId)!, [call]);
+    expect(report.missedQuestions.map((m) => m.id)).toEqual(["fc07"]);
+  });
+});

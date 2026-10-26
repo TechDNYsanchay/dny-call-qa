@@ -54,14 +54,16 @@ function conversionFor(person: Person, scored: CallRecord[]): Conversion[] {
   ];
 }
 
+/** Mandatory questions only: good-to-have ones (like the aspirational brand) aren't counted as missed. */
 function missedQuestions(scored: CallRecord[]) {
+  const all = [...questionsFor("first_call"), ...questionsFor("vision_call")];
+  const mandatory = new Set(all.filter((q) => q.priority === "must").map((q) => q.id));
   const counts = new Map<string, number>();
   for (const call of scored) {
     for (const item of call.result?.coverage ?? []) {
-      if (item.status === "missed") counts.set(item.question, (counts.get(item.question) ?? 0) + 1);
+      if (item.status === "missed" && mandatory.has(item.question)) counts.set(item.question, (counts.get(item.question) ?? 0) + 1);
     }
   }
-  const all = [...questionsFor("first_call"), ...questionsFor("vision_call")];
   return [...counts]
     .map(([id, count]) => ({ id, count, question: all.find((q) => q.id === id)?.question ?? id }))
     .sort((a, b) => b.count - a.count);
