@@ -84,9 +84,17 @@ export async function getPerson(id: string): Promise<Person | null> {
 export const isSampleData = cache(async () => (await listPeople()).some((p) => p.email?.endsWith(SAMPLE_EMAIL_DOMAIN)));
 
 /** The report covers the most recent IST day with calls; null before the first call arrives. */
-export const getReportDay = cache(async (): Promise<string | null> => {
-  const { data, error } = await (await supabaseUser()).from("calls").select("started_at").order("started_at", { ascending: false }).limit(1);
+export const getReportDay = cache(async (scoredOnly: boolean = false): Promise<string | null> => {
+  const query = (await supabaseUser()).from("calls").select("started_at");
+  const { data, error } = await (scoredOnly ? query.eq("scoring_status", "scored") : query).order("started_at", { ascending: false }).limit(1);
   if (error) fail("latest call", error);
+  return data[0] ? toIst(data[0].started_at).slice(0, 10) : null;
+});
+
+/** The first IST day with calls, the earliest date the date picker offers. */
+export const getFirstDay = cache(async (): Promise<string | null> => {
+  const { data, error } = await (await supabaseUser()).from("calls").select("started_at").order("started_at").limit(1);
+  if (error) fail("first call", error);
   return data[0] ? toIst(data[0].started_at).slice(0, 10) : null;
 });
 
@@ -182,15 +190,20 @@ function toCallRecord(row: CallRow): CallRecord {
 }
 
 /**
- * The nearest earlier and later IST days with calls, for the day buttons. Executives only see
- * their own calls (row-level security), so their buttons skip days they made no calls.
+ * The nearest earlier and later IST days with calls (or with scored calls), for the day buttons.
+ * Executives only see their own calls (row-level security), so their buttons skip days they
+ * made no calls.
  */
-export const getAdjacentDays = cache(async (day: string, personId?: string): Promise<{ previous: string | null; next: string | null }> => {
+type AdjacentDays = { previous: string | null; next: string | null };
+
+export const getAdjacentDays = cache(async (day: string, personId: string | null = null, scoredOnly: boolean = false): Promise<AdjacentDays> => {
   const [from, to] = istDayRange(day);
   const supabase = await supabaseUser();
   const calls = () => {
-    const query = supabase.from("calls").select("started_at");
-    return personId ? query.eq("person_id", personId) : query;
+    let query = supabase.from("calls").select("started_at");
+    if (personId) query = query.eq("person_id", personId);
+    if (scoredOnly) query = query.eq("scoring_status", "scored");
+    return query;
   };
   const [before, after] = await Promise.all([
     calls().lt("started_at", from).order("started_at", { ascending: false }).limit(1),

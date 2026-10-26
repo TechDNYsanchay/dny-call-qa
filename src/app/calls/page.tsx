@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader } from "@/components/ui";
-import { getAdjacentDays, getReportDay, listCalls, listPeople, requireMe } from "@/lib/data";
+import { getAdjacentDays, getFirstDay, getReportDay, listCalls, listPeople, requireMe } from "@/lib/data";
 import { formatClock, formatDay, formatDuration, IN_PROGRESS_LABEL, NOT_SCORED_LABEL, parseDayParam, STREAM_LABEL } from "@/lib/format";
 
 export const metadata = { title: "Calls · DNY Sales Agent" };
@@ -18,15 +18,43 @@ export default function CallsPage({ searchParams }: PageProps<"/calls">) {
 async function Calls({ searchParams }: Pick<PageProps<"/calls">, "searchParams">) {
   const me = await requireMe();
   const title = me.canSeeAll ? "Calls" : "My calls";
-  const latest = await getReportDay();
-  const day = parseDayParam((await searchParams).day) ?? latest;
-  if (!day) return <EmptyState title={title} />;
-  const [calls, people, around] = await Promise.all([listCalls(day), listPeople(), getAdjacentDays(day)]);
+  const query = await searchParams;
+  const requested = parseDayParam(query.day);
+  // Scored only: the table shows scored calls and the day buttons skip days without any.
+  const scoredOnly = query.scored === "1";
+  const [latest, first] = await Promise.all([getReportDay(scoredOnly), getFirstDay()]);
+  const day = requested ?? latest;
+  if (!day) {
+    return scoredOnly ? (
+      <>
+        <PageHeader title={title}>
+          <ScoredSwitch scoredOnly day={null} />
+        </PageHeader>
+        <Card>
+          <p className="py-6 text-center text-sm text-muted">No calls have been scored yet.</p>
+        </Card>
+      </>
+    ) : (
+      <EmptyState title={title} />
+    );
+  }
+  const [allCalls, people, around] = await Promise.all([listCalls(day), listPeople(), getAdjacentDays(day, null, scoredOnly)]);
+  const calls = scoredOnly ? allCalls.filter((c) => c.final) : allCalls;
 
   return (
     <>
-      <PageHeader title={title} subtitle={`${calls.length} calls logged on ${formatDay(day)}`}>
-        <DayNav path="/calls" day={day} latest={latest} {...around} />
+      <PageHeader
+        title={title}
+        subtitle={
+          scoredOnly
+            ? `${calls.length} scored of ${allCalls.length} calls on ${formatDay(day)}`
+            : `${calls.length} calls logged on ${formatDay(day)}`
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <ScoredSwitch scoredOnly={scoredOnly} day={requested} />
+          <DayNav path="/calls" day={day} first={first} latest={latest} params={scoredOnly ? { scored: "1" } : {}} {...around} />
+        </div>
       </PageHeader>
       <Card>
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
@@ -74,7 +102,7 @@ async function Calls({ searchParams }: Pick<PageProps<"/calls">, "searchParams">
               {calls.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-muted sm:px-5">
-                    No calls logged on this day.
+                    {scoredOnly ? "No scored calls on this day." : "No calls logged on this day."}
                   </td>
                 </tr>
               )}
@@ -83,5 +111,28 @@ async function Calls({ searchParams }: Pick<PageProps<"/calls">, "searchParams">
         </div>
       </Card>
     </>
+  );
+}
+
+/** "All calls | Scored only". Keeps a chosen day; without one, each view opens on its own latest day. */
+function ScoredSwitch({ scoredOnly, day }: { scoredOnly: boolean; day: string | null }) {
+  const href = (scored: boolean) => {
+    const query = new URLSearchParams();
+    if (scored) query.set("scored", "1");
+    if (day) query.set("day", day);
+    const qs = query.toString();
+    return qs ? `/calls?${qs}` : "/calls";
+  };
+  const option = (active: boolean) =>
+    `px-2.5 py-1 ${active ? "bg-background font-medium text-foreground" : "text-muted hover:text-foreground"}`;
+  return (
+    <div role="group" aria-label="Which calls" className="inline-flex overflow-hidden rounded-md border border-border bg-surface text-sm">
+      <Link href={href(false)} aria-current={!scoredOnly ? "true" : undefined} className={option(!scoredOnly)}>
+        All calls
+      </Link>
+      <Link href={href(true)} aria-current={scoredOnly ? "true" : undefined} className={`border-l border-border ${option(scoredOnly)}`}>
+        Scored only
+      </Link>
+    </div>
   );
 }

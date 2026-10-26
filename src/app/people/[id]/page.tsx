@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, Quote, StatTile } from "@/components/ui";
-import { getAdjacentDays, getPerson, getReportDay, listCalls, requireMe } from "@/lib/data";
+import { getAdjacentDays, getFirstDay, getPerson, getReportDay, listCalls, requireMe } from "@/lib/data";
 import { formatClock, formatDay, parseDayParam } from "@/lib/format";
 import { personDayReport } from "@/lib/reports";
 
@@ -20,7 +20,7 @@ async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[i
   const me = await requireMe();
   const person = await getPerson(id);
   if (!person) notFound();
-  const latest = await getReportDay();
+  const [latest, first] = await Promise.all([getReportDay(), getFirstDay()]);
   const day = parseDayParam((await searchParams).day) ?? latest;
   if (!day) return <EmptyState title={`${person.name}: daily QA report`} />;
   const [calls, around] = await Promise.all([listCalls(day), getAdjacentDays(day, person.id)]);
@@ -39,7 +39,7 @@ async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[i
       >
         <div className="flex flex-wrap items-center gap-3">
           {report.average !== null && report.band && <BandBadge score={report.average} band={report.band} />}
-          <DayNav path={`/people/${person.id}`} day={day} latest={latest} {...around} />
+          <DayNav path={`/people/${person.id}`} day={day} first={first} latest={latest} {...around} />
         </div>
       </PageHeader>
 

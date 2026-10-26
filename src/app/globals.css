@@ -2,6 +2,8 @@
 
 /* Status colours (green / amber / red bands) always ship with a shape and a label, never colour alone. */
 :root {
+  /* Native controls (date picker, audio player) follow the theme too. */
+  color-scheme: light dark;
   --background: #fcfcfb;
   --surface: #ffffff;
   --foreground: #1c1c1a;

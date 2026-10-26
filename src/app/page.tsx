@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getAdjacentDays, getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
+import { getAdjacentDays, getFirstDay, getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
 import { formatClock, formatDay, hardFailLabel, parseDayParam } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
@@ -20,7 +20,7 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const me = await requireMe();
   const requested = parseDayParam((await searchParams).day);
   if (!me.canSeeAll) redirect(`/people/${me.id}${requested ? `?day=${requested}` : ""}`);
-  const latest = await getReportDay();
+  const [latest, first] = await Promise.all([getReportDay(), getFirstDay()]);
   const day = requested ?? latest;
   if (!day) return <EmptyState title="Team summary" />;
   const [people, calls, previous, around] = await Promise.all([listPeople(), listCalls(day), previousDayAverages(day), getAdjacentDays(day)]);
@@ -32,7 +32,7 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   return (
     <>
       <PageHeader title="Team summary" subtitle={`Calls from ${formatDay(day)} · sent to founders at 8 am`}>
-        <DayNav path="/" day={day} latest={latest} {...around} />
+        <DayNav path="/" day={day} first={first} latest={latest} {...around} />
       </PageHeader>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
