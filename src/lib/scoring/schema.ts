@@ -40,11 +40,18 @@ const FeedbackSchema = z.object({
   tomorrow: z.string().min(1),
 });
 
+/** One transcript speaker label, or several when the speech-to-text service split one voice in two. */
+const SpeakerLabelsSchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]);
+
 const SpeakerRolesSchema = z.object({
-  /** Transcript speaker label that is the DNY executive or consultant. */
-  agent: z.string().min(1),
-  client: z.string().min(1),
+  /** Transcript speaker label(s) of the DNY executive or consultant. */
+  agent: SpeakerLabelsSchema,
+  client: SpeakerLabelsSchema,
 });
+
+export function speakerLabels(labels: string | string[]): string[] {
+  return typeof labels === "string" ? [labels] : labels;
+}
 
 const ConsentSchema = z.enum(["stated", "not_stated", "declined"]);
 

@@ -11,6 +11,7 @@ import {
   FIRST_CALL_JUDGED_HARD_FAILS,
   FirstCallResultSchema,
   VISION_CALL_JUDGED_HARD_FAILS,
+  speakerLabels,
   VisionCallResultSchema,
 } from "./schema";
 import { expectedQuestions } from "./call-sheets";
@@ -155,5 +156,12 @@ describe("call metrics", () => {
     const m = computeMetrics([], 0);
     expect(m.clientShare).toBe(0);
     expect(m.longestSilenceSec).toBe(0);
+  });
+});
+
+describe("speaker roles", () => {
+  it("takes one label or several per side, for voices the transcription split in two", () => {
+    expect(speakerLabels("1")).toEqual(["1"]);
+    expect(speakerLabels(["2", "0"])).toEqual(["2", "0"]);
   });
 });

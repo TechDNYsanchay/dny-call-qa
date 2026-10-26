@@ -13,7 +13,7 @@ import { formatTimestamp, toIst } from "../src/lib/format";
 import { expectedQuestions, FIRST_CALL_QUESTIONS, VISION_CALL_QUESTIONS, type Stream } from "../src/lib/scoring/call-sheets";
 import { finaliseScore, type Level } from "../src/lib/scoring/compute";
 import { computeMetrics, silences } from "../src/lib/scoring/metrics";
-import { CallResultSchema } from "../src/lib/scoring/schema";
+import { CallResultSchema, speakerLabels } from "../src/lib/scoring/schema";
 import { areasFor, hardFailsFor, RUBRIC_VERSION } from "../src/lib/scoring/scorecards";
 import { db, must } from "./lib.mjs";
 
@@ -105,21 +105,21 @@ if (command === "next") {
   const result = parsed.data;
   if (result.stream !== call.stream) throw new Error(`Call is a ${call.stream}, result is a ${result.stream}`);
   const labels = new Set(segments.map((s) => s.speaker_label));
-  for (const label of [result.speakerRoles.agent, result.speakerRoles.client]) {
+  const agentLabels = speakerLabels(result.speakerRoles.agent);
+  const clientLabels = speakerLabels(result.speakerRoles.client);
+  for (const label of [...agentLabels, ...clientLabels]) {
     if (!labels.has(label)) throw new Error(`Speaker "${label}" isn't in the transcript (${[...labels].join(", ")})`);
   }
+  if (agentLabels.some((l) => clientLabels.includes(l))) throw new Error("A speaker can't be both the executive and the client");
   const expected = expectedQuestions(call.stream, result.isRunningBusiness).map((q) => q.id);
   const missing = expected.filter((id) => !result.coverage.some((c) => c.question === id));
   if (missing.length) throw new Error(`Coverage is missing questions: ${missing.join(", ")}`);
 
   // Speaker roles onto the transcript, then the measured rules.
-  for (const [label, role] of [
-    [result.speakerRoles.agent, "agent"],
-    [result.speakerRoles.client, "client"],
-  ] as const) {
-    must(await db.from("transcript_segments").update({ role }).eq("call_id", callId).eq("speaker_label", label).select("idx"), "roles");
+  const roleOf = (label: string) => (agentLabels.includes(label) ? "agent" : clientLabels.includes(label) ? "client" : "unknown");
+  for (const label of labels) {
+    must(await db.from("transcript_segments").update({ role: roleOf(label) }).eq("call_id", callId).eq("speaker_label", label).select("idx"), "roles");
   }
-  const roleOf = (label: string) => (label === result.speakerRoles.agent ? "agent" : label === result.speakerRoles.client ? "client" : "unknown");
   const metrics = computeMetrics(
     segments.map((s) => ({ role: roleOf(s.speaker_label), startSec: s.start_sec, endSec: s.end_sec, text: s.text })),
     call.duration_sec,

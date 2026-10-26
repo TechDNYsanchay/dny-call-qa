@@ -7,6 +7,7 @@
 
 import type { Json } from "../src/lib/supabase/database.types";
 import { CALLS, PEOPLE, PREVIOUS_DAYS, REPORT_DATE } from "../src/lib/data/sample-data";
+import { speakerLabels } from "../src/lib/scoring/schema";
 import { RUBRIC_VERSION } from "../src/lib/scoring/scorecards";
 import { db, deleteLogin, ensureLogin, must, SAMPLE_EMAIL_DOMAIN } from "./lib.mjs";
 
@@ -104,7 +105,9 @@ async function load() {
               call_id: row.id,
               idx,
               speaker_label:
-                line.role === "agent" ? (call.result?.speakerRoles.agent ?? "Speaker A") : (call.result?.speakerRoles.client ?? "Speaker B"),
+                line.role === "agent"
+                  ? speakerLabels(call.result?.speakerRoles.agent ?? "Speaker A")[0]
+                  : speakerLabels(call.result?.speakerRoles.client ?? "Speaker B")[0],
               role: line.role,
               start_sec: line.startSec,
               end_sec: line.endSec,
