@@ -65,17 +65,16 @@ export async function requireMe(): Promise<Me> {
   return me;
 }
 
-/** Everyone active on the team list. Email is null for people tracked only by their Callyzer phone. */
-export const listPeople = cache(async (): Promise<(Person & { email: string | null })[]> => {
-  const { data, error } = await (await supabaseUser())
-    .from("people")
-    .select("id, full_name, role, email")
-    .eq("active", true)
-    .order("role")
-    .order("full_name");
+type Client = Awaited<ReturnType<typeof supabaseUser>> | ReturnType<typeof supabaseAdmin>;
+
+async function readPeople(db: Client): Promise<(Person & { email: string | null })[]> {
+  const { data, error } = await db.from("people").select("id, full_name, role, email").eq("active", true).order("role").order("full_name");
   if (error) fail("people", error);
   return data.map((p) => ({ id: p.id, name: p.full_name, role: p.role, title: TITLE[p.role], email: p.email }));
-});
+}
+
+/** Everyone active on the team list. Email is null for people tracked only by their Callyzer phone. */
+export const listPeople = cache(async () => readPeople(await supabaseUser()));
 
 export async function getPerson(id: string): Promise<Person | null> {
   return (await listPeople()).find((p) => p.id === id) ?? null;
@@ -217,18 +216,15 @@ export const getAdjacentDays = cache(async (day: string, personId: string | null
   return { previous: istDay(before.data), next: istDay(after.data) };
 });
 
-/** Calls on one IST day, earliest first. */
-export const listCalls = cache(async (day: string): Promise<CallRecord[]> => {
+async function readCalls(db: Client, day: string): Promise<CallRecord[]> {
   const [from, to] = istDayRange(day);
-  const { data, error } = await (await supabaseUser())
-    .from("calls")
-    .select(CALL_FIELDS)
-    .gte("started_at", from)
-    .lt("started_at", to)
-    .order("started_at");
+  const { data, error } = await db.from("calls").select(CALL_FIELDS).gte("started_at", from).lt("started_at", to).order("started_at");
   if (error) fail("calls", error);
   return (data as unknown as CallRow[]).map(toCallRecord);
-});
+}
+
+/** Calls on one IST day, earliest first. */
+export const listCalls = cache(async (day: string) => readCalls(await supabaseUser(), day));
 
 export async function getCall(id: string): Promise<CallRecord | null> {
   if (!UUID.test(id)) return null;
@@ -265,8 +261,12 @@ async function recordingLink(row: CallRow): Promise<string | undefined> {
 
 /** Daily averages for the six days before `day`, oldest first, per person id. */
 export async function previousDayAverages(day: string): Promise<Record<string, number[]>> {
+  return readPreviousDayAverages(await supabaseUser(), day);
+}
+
+async function readPreviousDayAverages(db: Client, day: string): Promise<Record<string, number[]>> {
   const [weekStart] = istDayRange(day, -6);
-  const { data, error } = await (await supabaseUser())
+  const { data, error } = await db
     .from("daily_reports")
     .select("person_id, report_date, summary")
     .gte("report_date", weekStart.slice(0, 10))
@@ -280,3 +280,13 @@ export async function previousDayAverages(day: string): Promise<Record<string, n
   }
   return byPerson;
 }
+
+/**
+ * The same reads for the report jobs, which run with no viewer: the secret key, so row-level
+ * security doesn't apply. Never use these to render a page.
+ */
+export const pipelineReads = {
+  people: () => readPeople(supabaseAdmin()),
+  calls: (day: string) => readCalls(supabaseAdmin(), day),
+  previousDayAverages: (day: string) => readPreviousDayAverages(supabaseAdmin(), day),
+};

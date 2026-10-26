@@ -413,6 +413,30 @@ export type Database = {
           },
         ]
       }
+      report_sends: {
+        Row: {
+          kind: string
+          recipient: string
+          report_date: string
+          sent_at: string
+          subject_key: string
+        }
+        Insert: {
+          kind: string
+          recipient: string
+          report_date: string
+          sent_at?: string
+          subject_key: string
+        }
+        Update: {
+          kind?: string
+          recipient?: string
+          report_date?: string
+          sent_at?: string
+          subject_key?: string
+        }
+        Relationships: []
+      }
       transcript_segments: {
         Row: {
           call_id: string

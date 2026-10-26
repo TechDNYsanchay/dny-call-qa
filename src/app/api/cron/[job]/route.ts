@@ -1,8 +1,10 @@
 import { connection } from "next/server";
+import { MailNotConfigured } from "@/lib/email/send";
 import { addDays, toIst } from "@/lib/format";
 import { syncCallyzer } from "@/lib/ingest/callyzer-api";
 import { syncTldv } from "@/lib/ingest/tldv";
 import { transcribePending } from "@/lib/ingest/transcribe";
+import { buildDailyReports, sendDailyReports } from "@/lib/report-jobs";
 import { TranscriberNotConfigured } from "@/lib/transcription";
 import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
 
@@ -40,6 +42,15 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
       const limit = Number(new URL(request.url).searchParams.get("limit"));
       return Response.json({ job, ...(await transcribePending(TRANSCRIBE_BUDGET_MS, limit > 0 ? limit : Infinity)) });
     }
+    if (job === "build-reports" || job === "send-reports") {
+      // Yesterday's calls by default; ?day=YYYY-MM-DD for another day, ?preview=1 to see the emails unsent.
+      const params = new URL(request.url).searchParams;
+      const day = params.get("day") ?? addDays(today, -1);
+      if (!DAY.test(day)) return Response.json({ error: "day must be YYYY-MM-DD" }, { status: 400 });
+      if (job === "build-reports") return Response.json({ job, ...(await buildDailyReports(day)) });
+      const limit = Number(params.get("limit"));
+      return Response.json({ job, ...(await sendDailyReports(day, { preview: params.get("preview") === "1", limit: limit > 0 ? limit : Infinity })) });
+    }
     if (job === "tldv-sync") {
       if (!process.env.TLDV_API_KEY) return Response.json({ job, done: false, note: "TLDV_API_KEY is not set" }, { status: 202 });
       const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
@@ -59,7 +70,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
       return Response.json({ job, ...(await syncCallyzer(from, to)) });
     }
   } catch (error) {
-    if (error instanceof TranscriberNotConfigured) {
+    if (error instanceof TranscriberNotConfigured || error instanceof MailNotConfigured) {
       return Response.json({ job, done: false, note: error.message }, { status: 202 });
     }
     console.error(`cron ${job}:`, error);
