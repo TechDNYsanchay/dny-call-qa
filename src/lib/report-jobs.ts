@@ -4,11 +4,12 @@
 
 import "server-only";
 import { pipelineReads } from "@/lib/data";
-import { personReportEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
 import { alert } from "@/lib/alerts";
 import { recipientFor, sendEmail } from "@/lib/email/send";
 import { istDayRange } from "@/lib/format";
 import { personDayReport, teamSummary } from "@/lib/reports";
+import { rollup, type Period } from "@/lib/rollups";
 import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
@@ -122,5 +123,50 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
     if (targets.length === 0) result.skipped.push({ kind: "team", who: "founders", why: "no founder, manager or admin on the team list" });
     for (const reader of targets) await deliver("team", "team", reader.name, reader.email, email);
   }
+  return result;
+}
+
+/**
+ * Emails the weekly or monthly roll-up: the team version to founders, managers and admins, and
+ * each person's own. Same once-only rule and REPORTS_TO test inbox as the daily emails.
+ */
+export async function sendRollups(period: Period, { preview = false, limit = Infinity } = {}): Promise<SendResult> {
+  const db = supabaseAdmin();
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
+  const [people, calls, previousCalls] = await Promise.all([
+    pipelineReads.people(),
+    pipelineReads.callsBetween(period.from, period.to),
+    pipelineReads.callsBetween(period.previous.from, period.previous.to),
+  ]);
+  const result: SendResult = { day: period.from, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
+  if (calls.length === 0) return result;
+  const r = rollup(period, people, calls, previousCalls);
+
+  const { data: alreadySent, error } = await db.from("report_sends").select("kind, subject_key, recipient").eq("report_date", period.from);
+  if (error) throw new Error(`report sends: ${error.message}`);
+
+  async function deliver(kind: "person" | "team", key: string, who: string, intended: string | null, email: Email) {
+    const to = recipientFor(intended);
+    if (!to) return void result.skipped.push({ kind, who, why: "no email address on the team list" });
+    if (preview) return void result.preview!.push(email);
+    // Keys carry the period kind, so a Monday's weekly email never clashes with that day's daily one.
+    const sendKey = `${period.kind}:${key}`;
+    if ((alreadySent ?? []).some((s) => s.kind === kind && s.subject_key === sendKey && s.recipient === to)) {
+      return void result.skipped.push({ kind, who, why: "already sent" });
+    }
+    if (result.sent.length >= limit) return void result.skipped.push({ kind, who, why: "over the limit for this run" });
+    await sendEmail(to, email);
+    const { error: logError } = await db.from("report_sends").insert({ report_date: period.from, kind, subject_key: sendKey, recipient: to });
+    if (logError) throw new Error(`record send: ${logError.message}`);
+    result.sent.push({ kind, subject: email.subject, to });
+  }
+
+  for (const p of r.people) {
+    const person = people.find((x) => x.id === p.person.id);
+    await deliver("person", p.person.id, p.person.name, person?.email ?? null, personRollupEmail(p, r, site));
+  }
+  const email = teamRollupEmail(r, site);
+  const targets = process.env.REPORTS_TO ? [{ name: "test inbox", email: null }] : people.filter((p) => READER_ROLES.includes(p.role));
+  for (const reader of targets) await deliver("team", "team", reader.name, reader.email, email);
   return result;
 }

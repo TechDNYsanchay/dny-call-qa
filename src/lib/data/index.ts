@@ -261,6 +261,17 @@ async function readCalls(db: Client, day: string): Promise<CallRecord[]> {
 /** Calls on one IST day, earliest first. */
 export const listCalls = cache(async (day: string) => readCalls(await supabaseUser(), day));
 
+async function readCallsBetween(db: Client, fromDay: string, toDay: string): Promise<CallRecord[]> {
+  const [from] = istDayRange(fromDay);
+  const [, to] = istDayRange(toDay);
+  const { data, error } = await db.from("calls").select(CALL_FIELDS).gte("started_at", from).lt("started_at", to).order("started_at");
+  if (error) fail("calls", error);
+  return (data as unknown as CallRow[]).map(toCallRecord);
+}
+
+/** Calls from `fromDay` to `toDay` (IST, inclusive), for the weekly and monthly roll-ups. */
+export const listCallsBetween = cache(async (fromDay: string, toDay: string) => readCallsBetween(await supabaseUser(), fromDay, toDay));
+
 export async function getCall(id: string): Promise<CallRecord | null> {
   if (!UUID.test(id)) return null;
   const { data, error } = await (await supabaseUser())
@@ -323,6 +334,7 @@ async function readPreviousDayAverages(db: Client, day: string): Promise<Record<
 export const pipelineReads = {
   people: () => readPeople(supabaseAdmin()),
   calls: (day: string) => readCalls(supabaseAdmin(), day),
+  callsBetween: (fromDay: string, toDay: string) => readCallsBetween(supabaseAdmin(), fromDay, toDay),
   previousDayAverages: (day: string) => readPreviousDayAverages(supabaseAdmin(), day),
 };
 

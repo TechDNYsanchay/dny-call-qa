@@ -5,6 +5,7 @@
 import type { CallRecord } from "@/lib/data/types";
 import { formatClock, formatDay, formatDuration, hardFailLabel } from "@/lib/format";
 import type { PersonDayReport, TeamSummary } from "@/lib/reports";
+import type { PersonRollup, Rollup } from "@/lib/rollups";
 import type { Band } from "@/lib/scoring/compute";
 
 export interface Email {
@@ -175,4 +176,79 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
   ].join("\n");
 
   return { subject, html: layout(`Team summary · ${when}`, body, { href: link(`/?day=${day}`), label: "Open the team page" }), text };
+}
+
+// ---------------------------------------------------------------------------
+// Weekly and monthly roll-ups
+// ---------------------------------------------------------------------------
+
+function changeHtml(value: number | null, against: string): string {
+  if (value === null) return "";
+  if (value === 0) return ` <span style="${MUTED}">(no change vs ${esc(against)})</span>`;
+  return ` <span style="color:${value > 0 ? "#0ca30c" : "#d03b3b"}">${value > 0 ? "▲" : "▼"} ${Math.abs(value)}</span> <span style="${MUTED}">vs ${esc(against)}</span>`;
+}
+const changeText = (value: number | null, against: string) =>
+  value === null ? "" : value === 0 ? ` (no change vs ${against})` : ` (${value > 0 ? "up" : "down"} ${Math.abs(value)} vs ${against})`;
+
+const periodName = (r: { period: { kind: "week" | "month" } }) => (r.period.kind === "week" ? "Weekly" : "Monthly");
+
+export function teamRollupEmail(r: Rollup, siteUrl: string): Email {
+  const link = `${siteUrl}/rollups?${r.period.query}`;
+  const shortLabel = r.period.label.replace(/^Week of /, "");
+  const subject =
+    r.average !== null
+      ? `${periodName(r)} call QA, ${shortLabel}: average ${bandText(r.average, r.band)}${changeText(r.change, r.period.previous.label)} · ${r.scored} scored`
+      : `${periodName(r)} call QA, ${shortLabel}: nothing scored`;
+  const rows = r.people
+    .map(
+      (p, i) =>
+        `<tr><td style="padding:6px 8px 6px 0">${i + 1}. ${esc(p.person.name)}</td><td style="padding:6px 8px;text-align:right">${p.scored}/${p.calls}</td><td style="padding:6px 8px">${bandHtml(p.average, p.band)}${changeHtml(p.change, r.period.previous.label)}</td><td style="padding:6px 8px;text-align:right">${p.hardFailCalls}</td><td style="padding:6px 0 6px 8px;text-align:right">${p.vcsBooked}/${p.firstCallsScored}</td></tr>`,
+    )
+    .join("");
+  const body = [
+    `<p style="${P}">Team average ${bandHtml(r.average, r.band)}${changeHtml(r.change, r.period.previous.label)} · ${r.scored} of ${r.calls} calls scored · ${r.hardFailCalls} with a hard fail · VCs booked: ${r.vcsBooked} from ${r.firstCallsScored} scored first calls</p>`,
+    rows &&
+      `<h2 style="${H2}">Leaderboard</h2><table style="border-collapse:collapse;font-size:13px"><tr style="${MUTED};text-align:left"><th style="padding:0 8px 4px 0;font-weight:500">Person</th><th style="padding:0 8px 4px;font-weight:500">Scored</th><th style="padding:0 8px 4px;font-weight:500">Average</th><th style="padding:0 8px 4px;font-weight:500">Hard fails</th><th style="padding:0 0 4px 8px;font-weight:500">VCs booked</th></tr>${rows}</table>`,
+    r.hardFails.length &&
+      `<h2 style="${H2}">Hard fails by type</h2><ul style="padding-left:18px;margin:0">${r.hardFails.map((h) => `<li>${esc(h.label)} <span style="${MUTED}">×${h.count}</span></li>`).join("")}</ul>`,
+    r.missed.length &&
+      `<h2 style="${H2}">Mandatory questions skipped most</h2><ul style="padding-left:18px;margin:0">${r.missed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} calls)</span></li>`).join("")}</ul>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const text = [
+    `${periodName(r)} call QA: ${r.period.label}`,
+    `Team average ${bandText(r.average, r.band)}${changeText(r.change, r.period.previous.label)} · ${r.scored} scored · ${r.hardFailCalls} with a hard fail`,
+    ...r.people.map((p, i) => `${i + 1}. ${p.person.name}: ${bandText(p.average, p.band)}${changeText(p.change, r.period.previous.label)}, ${p.scored}/${p.calls} scored`),
+    `Roll-up: ${link}`,
+  ].join("\n");
+  return { subject, html: layout(`${periodName(r)} roll-up · ${r.period.label}`, body, { href: link, label: "Open the roll-up" }), text };
+}
+
+export function personRollupEmail(p: PersonRollup, r: Rollup, siteUrl: string): Email {
+  const link = `${siteUrl}/rollups?${r.period.query}`;
+  const shortLabel = r.period.label.replace(/^Week of /, "");
+  const yourPeriod = r.period.kind === "week" ? "Your week" : "Your month";
+  const subject =
+    p.average !== null
+      ? `${yourPeriod}, ${shortLabel}: ${bandText(p.average, p.band)}${changeText(p.change, r.period.previous.label)} · ${p.scored} calls scored`
+      : `${yourPeriod}, ${shortLabel}: ${p.calls} calls logged, none scored`;
+  const callLink = (label: string, c: NonNullable<PersonRollup["best"]>) =>
+    `<li><a href="${esc(`${siteUrl}/calls/${c.id}`)}" style="color:#1c1c1a">${label}: ${esc(formatDay(c.startedAt))} ${formatClock(c.startedAt)} · ${esc(c.client.name)}</a> · ${bandHtml(c.final!.score, c.final!.band)}</li>`;
+  const body = [
+    `<p style="${P}">Average ${bandHtml(p.average, p.band)}${changeHtml(p.change, r.period.previous.label)} · ${p.scored} of ${p.calls} calls scored · ${p.hardFailCalls} with a hard fail · VCs booked: ${p.vcsBooked} of ${p.firstCallsScored}${p.avgClientSharePct === null ? "" : ` · clients talked ${p.avgClientSharePct}% on average`}</p>`,
+    (p.best || p.worst) &&
+      `<h2 style="${H2}">Listen back</h2><ul style="padding-left:18px;margin:0">${p.best ? callLink("Best call", p.best) : ""}${p.worst ? callLink("Weakest call", p.worst) : ""}</ul>`,
+    p.missed.length &&
+      `<h2 style="${H2}">Questions you skipped most</h2><ul style="padding-left:18px;margin:0">${p.missed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} calls)</span></li>`).join("")}</ul>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const text = [
+    `${p.person.name}: ${r.period.label}`,
+    `Average ${bandText(p.average, p.band)}${changeText(p.change, r.period.previous.label)} · ${p.scored}/${p.calls} scored · ${p.hardFailCalls} with a hard fail`,
+    ...p.missed.map((m) => `Skipped: ${m.question} (${m.count} calls)`),
+    `Roll-up: ${link}`,
+  ].join("\n");
+  return { subject, html: layout(`${p.person.name} · ${r.period.label}`, body, { href: link, label: "Open the roll-up" }), text };
 }

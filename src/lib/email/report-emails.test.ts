@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CALLS, PEOPLE, PREVIOUS_DAYS, REPORT_DATE } from "@/lib/data/sample-data";
 import { personDayReport, teamSummary } from "@/lib/reports";
-import { personReportEmail, teamSummaryEmail } from "./report-emails";
+import { rollup, weekPeriod } from "@/lib/rollups";
+import { personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail } from "./report-emails";
 
 const calls = [...CALLS].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 const person = (id: string) => PEOPLE.find((p) => p.id === id)!;
@@ -50,5 +51,31 @@ describe("the founders' summary email", () => {
   it("lists red calls for stand-up with the hard-fail reason", () => {
     expect(email.html).toContain("Red calls to review in stand-up");
     expect(email.html).toContain("A fee or package quoted");
+  });
+});
+
+describe("the weekly roll-up emails", () => {
+  const r = rollup(weekPeriod(REPORT_DATE), PEOPLE, calls, []);
+
+  it("names the week, the team average and the count in the subject", () => {
+    expect(teamRollupEmail(r, SITE).subject).toMatch(/^Weekly call QA, 19 – 25 Oct 2026: average [\d.]+ (Green|Amber|Red) · \d+ scored$/);
+  });
+
+  it("ranks people and links the roll-up page", () => {
+    const html = teamRollupEmail(r, SITE).html;
+    expect(html).toContain("Leaderboard");
+    expect(html).toContain(`${SITE}/rollups?week=2026-10-19`);
+  });
+
+  it("gives each person their own week with calls to listen back to", () => {
+    const person = r.people[0];
+    const email = personRollupEmail(person, r, SITE);
+    expect(email.subject).toMatch(/^Your week, 19 – 25 Oct 2026: /);
+    if (person.best) expect(email.html).toContain(`${SITE}/calls/${person.best.id}`);
+  });
+
+  it("shows the change against last week with an arrow, not colour alone", () => {
+    const withPrevious = rollup(weekPeriod(REPORT_DATE), PEOPLE, calls, calls.map((c) => (c.final ? { ...c, final: { ...c.final, score: 50 } } : c)));
+    expect(teamRollupEmail(withPrevious, SITE).html).toMatch(/[▲▼] [\d.]+<\/span> <span[^>]*>vs last week/);
   });
 });

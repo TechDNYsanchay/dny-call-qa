@@ -5,7 +5,8 @@ import { addDays, toIst } from "@/lib/format";
 import { syncCallyzer } from "@/lib/ingest/callyzer-api";
 import { syncTldv } from "@/lib/ingest/tldv";
 import { transcribePending } from "@/lib/ingest/transcribe";
-import { buildDailyReports, sendDailyReports } from "@/lib/report-jobs";
+import { buildDailyReports, sendDailyReports, sendRollups } from "@/lib/report-jobs";
+import { monthPeriod, weekPeriod, type Period } from "@/lib/rollups";
 import { TranscriberNotConfigured } from "@/lib/transcription";
 import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
 
@@ -22,6 +23,7 @@ const JOBS = {
   "tldv-sync": "00:50 IST: store tl;dv meetings from the last 3 days that the webhook missed",
   "build-reports": "06:00 IST: flag unscored calls, write capture fields to leads, build reports",
   "send-reports": "08:00 IST: send each person's QA report and the founders' summary",
+  "send-rollups": "08:15 IST: on Mondays the weekly roll-up for last week, on the 1st the monthly one for last month",
 } as const;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,6 +35,7 @@ const WHAT_STOPS: Record<string, string> = {
   transcribe: "Recordings aren't being transcribed, so calls can't be scored. Check the Deepgram key and credit.",
   "build-reports": "Yesterday's reports weren't prepared, so missing recordings aren't flagged.",
   "send-reports": "The 8 am reports may not have gone out.",
+  "send-rollups": "The weekly or monthly roll-up email may not have gone out.",
   "tldv-sync": "Vision calls from tl;dv aren't being collected.",
 };
 const MAX_RANGE_DAYS = 15;
@@ -68,6 +71,26 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
       if (job === "build-reports") return Response.json({ job, ...(await buildDailyReports(day)) });
       const limit = Number(params.get("limit"));
       return Response.json({ job, ...(await sendDailyReports(day, { preview: params.get("preview") === "1", limit: limit > 0 ? limit : Infinity })) });
+    }
+    if (job === "send-rollups") {
+      // Due ones by default; ?week=<a day in the week> or ?month=YYYY-MM for a chosen one, ?preview=1, ?limit=N.
+      const params = new URL(request.url).searchParams;
+      const week = params.get("week");
+      const month = params.get("month");
+      const periods: Period[] = [];
+      if (week && DAY.test(week)) periods.push(weekPeriod(week));
+      else if (month && /^\d{4}-\d{2}$/.test(month)) periods.push(monthPeriod(month));
+      else {
+        if (new Date(`${today}T00:00:00Z`).getUTCDay() === 1) periods.push(weekPeriod(addDays(today, -7)));
+        if (today.endsWith("-01")) periods.push(monthPeriod(addDays(today, -1).slice(0, 7)));
+      }
+      if (periods.length === 0) return Response.json({ job, note: "No roll-up is due today" });
+      const limit = Number(params.get("limit"));
+      const runs = [];
+      for (const period of periods) {
+        runs.push({ period: period.label, ...(await sendRollups(period, { preview: params.get("preview") === "1", limit: limit > 0 ? limit : Infinity })) });
+      }
+      return Response.json({ job, runs });
     }
     if (job === "tldv-sync") {
       if (!process.env.TLDV_API_KEY) return Response.json({ job, done: false, note: "TLDV_API_KEY is not set" }, { status: 202 });

@@ -101,7 +101,8 @@ export function Quote({ evidence }: { evidence: Evidence }) {
  * Seven daily averages, oldest first; the last point is today. One series, so no legend:
  * history in the muted hue, today in ink. Fixed 40-100 scale so rows compare.
  */
-export function TrendSparkline({ values }: { values: (number | null)[] }) {
+/** Daily averages as a small line; `labels` names each point (default: days before today). */
+export function TrendSparkline({ values, labels }: { values: (number | null)[]; labels?: string[] }) {
   const w = 104;
   const h = 28;
   const pad = 4;
@@ -109,10 +110,10 @@ export function TrendSparkline({ values }: { values: (number | null)[] }) {
   const y = (v: number) => h - pad - ((Math.min(100, Math.max(40, v)) - 40) / 60) * (h - 2 * pad);
   const points = values.flatMap((v, i) => (v === null ? [] : [{ i, v }]));
   const today = values.length - 1;
-  const dayLabel = (i: number) => (i === today ? "Today" : `${today - i} day${today - i === 1 ? "" : "s"} before`);
+  const dayLabel = (i: number) => labels?.[i] ?? (i === today ? "Today" : `${today - i} day${today - i === 1 ? "" : "s"} before`);
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`7-day trend: ${points.map((p) => p.v).join(", ")}`}>
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`Trend: ${points.map((p) => p.v).join(", ")}`}>
       <polyline
         points={points.map((p) => `${x(p.i)},${y(p.v)}`).join(" ")}
         fill="none"
