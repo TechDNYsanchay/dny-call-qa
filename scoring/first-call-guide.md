@@ -75,11 +75,11 @@ the sheet captures is missing, e.g. name but no email, or size but not whether i
     - hot: a concrete plan and a meeting fixed
     - warm: interested, but the meeting or fit is still open
     - cold: not interested, or unrealistic
-  - **`vcDateTime`:** plain text with the actual date (work it out from the call date), and say if the meeting is in person.
+  - **`vcDateTime`:** only when a meeting was actually fixed: plain text with the actual date and time (work it out from the call date), and say if it's in person. Otherwise `null`; describe an unfixed ask in the `cta` reason instead.
 - **Feedback:**
   - 1–2 strengths and 1–2 fixes, each with an exact quote and its timestamp.
   - Each fix has a `betterLine` the executive could actually say, in natural Hinglish in Roman script.
-  - `tomorrow` is one line.
+  - `tomorrow` is one line with **one** behaviour to change, the most important one (usually the main fix). Never a list.
 
 ## Guardrails (brief section 7)
 
