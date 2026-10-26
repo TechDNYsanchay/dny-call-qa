@@ -21,14 +21,15 @@ export interface TranscribeRun {
   outOfTime: boolean;
 }
 
-export async function transcribePending(budgetMs: number): Promise<TranscribeRun> {
+/** Transcribes waiting calls until none are left, time runs out, or `maxCalls` are done. */
+export async function transcribePending(budgetMs: number, maxCalls = Infinity): Promise<TranscribeRun> {
   const transcriber = configuredTranscriber();
   const db = supabaseAdmin();
   const until = Date.now() + budgetMs;
   const run: TranscribeRun = { provider: transcriber.id, transcribed: 0, retrying: 0, failed: 0, outOfTime: false };
   let failuresInARow = 0;
 
-  while (failuresInARow < MAX_FAILURES_IN_A_ROW) {
+  while (failuresInARow < MAX_FAILURES_IN_A_ROW && run.transcribed + run.retrying + run.failed < maxCalls) {
     if (Date.now() > until) {
       run.outOfTime = true;
       break;

@@ -36,7 +36,9 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
 
   try {
     if (job === "transcribe") {
-      return Response.json({ job, ...(await transcribePending(TRANSCRIBE_BUDGET_MS)) });
+      // ?limit=N transcribes at most N calls, for trying the job by hand.
+      const limit = Number(new URL(request.url).searchParams.get("limit"));
+      return Response.json({ job, ...(await transcribePending(TRANSCRIBE_BUDGET_MS, limit > 0 ? limit : Infinity)) });
     }
     if (job === "tldv-sync") {
       if (!process.env.TLDV_API_KEY) return Response.json({ job, done: false, note: "TLDV_API_KEY is not set" }, { status: 202 });
