@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { RecordingPlayer, Transcript } from "@/components/call-recording";
 import { BandBadge, Card, Chip, Loading, PageHeader, Quote } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
 import { getCall, getPerson, requireMe, type CallRecord } from "@/lib/data";
@@ -9,7 +10,6 @@ import {
   formatDay,
   formatDuration,
   formatPct,
-  formatTimestamp,
   hardFailLabel,
   IN_PROGRESS_LABEL,
   NOT_SCORED_LABEL,
@@ -53,20 +53,23 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
         )}
       </PageHeader>
 
-      <Card className="mb-6">
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
-          <span className="grid size-8 place-items-center rounded-full border border-border">▶</span>
-          {call.recordingStatus === "available"
-            ? "The recording player appears here once Supabase Storage is connected. Click a transcript line to jump to it."
+      <RecordingPlayer
+        url={call.recordingUrl}
+        fallback={
+          call.recordingStatus === "available"
+            ? "The recording couldn't be loaded. Refresh the page to try again."
             : call.recordingStatus === "missing"
               ? "No recording arrived for this call. It is flagged as missing, never scored as zero."
               : call.recordingStatus === "declined"
                 ? "The client declined recording, so this call is logged but not scored."
-                : "Waiting for the recording."}
-        </div>
-      </Card>
+                : call.notScored
+                  ? "No recording is kept for calls that aren't scored."
+                  : "Waiting for the recording."
+        }
+      />
 
       {call.final && call.result ? <ScoredCall call={call} /> : null}
+      {call.transcript.length > 0 && <Transcript lines={call.transcript} />}
     </>
   );
 }
@@ -237,20 +240,6 @@ function ScoredCall({ call }: { call: CallRecord }) {
           </dl>
         </Card>
       </div>
-
-      <Card title="Transcript (excerpt)">
-        <ol className="space-y-2">
-          {call.transcript.map((line, i) => (
-            <li key={i} className="flex gap-3 text-sm">
-              <span className="w-14 shrink-0 font-mono text-xs leading-5 text-muted tabular-nums">{formatTimestamp(line.startSec)}</span>
-              <span className={`w-12 shrink-0 text-xs leading-5 ${line.role === "agent" ? "font-medium" : "text-muted"}`}>
-                {line.role === "agent" ? "DNY" : "Client"}
-              </span>
-              <span>{line.text}</span>
-            </li>
-          ))}
-        </ol>
-      </Card>
     </div>
   );
 }

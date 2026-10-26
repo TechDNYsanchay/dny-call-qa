@@ -170,6 +170,11 @@ export type Database = {
           source_id: string
           started_at: string
           stream: Database["public"]["Enums"]["call_stream"]
+          transcribed_at: string | null
+          transcript_attempts: number
+          transcript_error: string | null
+          transcript_provider: string | null
+          transcript_started_at: string | null
           transcript_status: Database["public"]["Enums"]["transcript_status"]
         }
         Insert: {
@@ -192,6 +197,11 @@ export type Database = {
           source_id: string
           started_at: string
           stream: Database["public"]["Enums"]["call_stream"]
+          transcribed_at?: string | null
+          transcript_attempts?: number
+          transcript_error?: string | null
+          transcript_provider?: string | null
+          transcript_started_at?: string | null
           transcript_status?: Database["public"]["Enums"]["transcript_status"]
         }
         Update: {
@@ -214,6 +224,11 @@ export type Database = {
           source_id?: string
           started_at?: string
           stream?: Database["public"]["Enums"]["call_stream"]
+          transcribed_at?: string | null
+          transcript_attempts?: number
+          transcript_error?: string | null
+          transcript_provider?: string | null
+          transcript_started_at?: string | null
           transcript_status?: Database["public"]["Enums"]["transcript_status"]
         }
         Relationships: [
@@ -448,6 +463,20 @@ export type Database = {
     }
     Functions: {
       can_see_all: { Args: never; Returns: boolean }
+      claim_call_for_transcription: {
+        Args: {
+          p_max_attempts?: number
+          p_retry_after?: string
+          p_stale_after?: string
+        }
+        Returns: {
+          attempt: number
+          call_id: string
+          duration: number
+          path: string
+          started: string
+        }[]
+      }
       current_person_id: { Args: never; Returns: string }
       mark_scoring_failed: {
         Args: { p_call_id: string; p_reason: string }
@@ -473,6 +502,10 @@ export type Database = {
           p_lead_id: string
           p_stream: Database["public"]["Enums"]["call_stream"]
         }
+        Returns: undefined
+      }
+      save_transcript: {
+        Args: { p_call_id: string; p_provider: string; p_segments: Json }
         Returns: undefined
       }
     }

@@ -10,6 +10,10 @@
       "schedule": "*/15 3-17 * * *"
     },
     {
+      "path": "/api/cron/transcribe",
+      "schedule": "7,22,37,52 3-19 * * *"
+    },
+    {
       "path": "/api/cron/sweep",
       "schedule": "0 19 * * *"
     },

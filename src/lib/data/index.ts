@@ -7,7 +7,7 @@ import { cache } from "react";
 import { istDayRange, toIst } from "@/lib/format";
 import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
 import { CallResultSchema } from "@/lib/scoring/schema";
-import { supabaseUser } from "@/lib/supabase/server";
+import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
 import type { CallRecord, Person, PersonRole } from "./types";
 
 export type { CallRecord, Person } from "./types";
@@ -98,6 +98,7 @@ type CallRow = {
   started_at: string;
   duration_sec: number;
   recording_status: CallRecord["recordingStatus"];
+  recording_path?: string | null;
   transcript_status: "not_needed" | "pending" | "processing" | "done" | "failed";
   scoring_status: "not_eligible" | "waiting" | "ready" | "scored" | "failed";
   not_scored_reason: string | null;
@@ -113,7 +114,7 @@ type CallRow = {
     service_share_of_agent: number;
   } | null;
   call_scores: { score: number; band: Band; levels: unknown; hard_fails: string[]; overrides: string[]; result: unknown } | null;
-  transcript_segments?: { role: string; start_sec: number; end_sec: number; text: string; topic: string | null }[];
+  transcript_segments?: { speaker_label: string; role: string; start_sec: number; end_sec: number; text: string; topic: string | null }[];
 };
 
 function toCallRecord(row: CallRow): CallRecord {
@@ -132,6 +133,7 @@ function toCallRecord(row: CallRow): CallRecord {
     client: { name: row.leads?.name ?? "Unknown client", city: row.leads?.city ?? "" },
     recordingStatus: row.recording_status,
     transcript: (row.transcript_segments ?? []).map((s) => ({
+      speaker: s.speaker_label,
       role: s.role as CallRecord["transcript"][number]["role"],
       startSec: Number(s.start_sec),
       endSec: Number(s.end_sec),
@@ -169,7 +171,9 @@ function toCallRecord(row: CallRow): CallRecord {
           ? "recording"
           : row.transcript_status === "done"
             ? "scoring"
-            : "transcription"
+            : row.transcript_status === "failed"
+              ? "transcription_failed"
+              : "transcription"
         : undefined,
     agentPhone: row.agent_phone ?? undefined,
   };
@@ -192,12 +196,28 @@ export async function getCall(id: string): Promise<CallRecord | null> {
   if (!UUID.test(id)) return null;
   const { data, error } = await (await supabaseUser())
     .from("calls")
-    .select(`${CALL_FIELDS}, transcript_segments ( idx, role, start_sec, end_sec, text, topic )`)
+    .select(`${CALL_FIELDS}, recording_path, transcript_segments ( idx, speaker_label, role, start_sec, end_sec, text, topic )`)
     .eq("id", id)
     .order("idx", { referencedTable: "transcript_segments" })
     .maybeSingle();
   if (error) fail("call", error);
-  return data ? toCallRecord(data as unknown as CallRow) : null;
+  if (!data) return null;
+  const row = data as unknown as CallRow;
+  return { ...toCallRecord(row), recordingUrl: await recordingLink(row) };
+}
+
+/**
+ * A one-hour link to play the recording. Only made after the row-level-security read above
+ * returned the call, so the viewer is allowed to see it; the bucket itself stays private.
+ */
+async function recordingLink(row: CallRow): Promise<string | undefined> {
+  if (row.recording_status !== "available" || !row.recording_path) return undefined;
+  const { data, error } = await supabaseAdmin().storage.from("recordings").createSignedUrl(row.recording_path, 60 * 60);
+  if (error) {
+    console.error(`Call ${row.id}: recording link failed: ${error.message}`);
+    return undefined;
+  }
+  return data.signedUrl;
 }
 
 /** Daily averages for the six days before `day`, oldest first, per person id. */

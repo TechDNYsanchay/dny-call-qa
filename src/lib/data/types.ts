@@ -13,12 +13,16 @@ export interface Person {
 }
 
 export interface TranscriptLine {
+  /** The speech-to-text service's label for the voice; who is who is decided at scoring. */
+  speaker?: string;
   role: SpeakerRole;
   startSec: number;
   endSec: number;
   text: string;
   topic?: Topic;
 }
+
+export type InProgress = "recording" | "transcription" | "transcription_failed" | "scoring";
 
 export interface CallRecord {
   id: string;
@@ -29,13 +33,15 @@ export interface CallRecord {
   durationSec: number;
   client: { name: string; city: string };
   recordingStatus: RecordingStatus;
+  /** Short-lived link to play the stored recording (call page only). */
+  recordingUrl?: string;
   transcript: TranscriptLine[];
   metrics?: CallMetrics;
   result?: CallResult;
   final?: FinalScore;
   notScored?: NotScoredReason;
   /** Arrived and on its way to a score. */
-  inProgress?: "recording" | "transcription" | "scoring";
+  inProgress?: InProgress;
   /** The executive's phone from Callyzer, kept for calls from numbers not on the team list. */
   agentPhone?: string;
 }

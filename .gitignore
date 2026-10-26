@@ -37,3 +37,4 @@ next-env.d.ts
 # editor swap and lock files
 *.swp
 .*.swp
+stt-compare/
