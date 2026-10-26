@@ -3,7 +3,9 @@
 // (weights, bands, measured rules) so the numbers can't drift with the prompt.
 //
 //   npm run score -- next [--call <id>]          print the next call ready for scoring (or that call)
-//   npm run score -- save <callId> <result.json>  check the result, save score, metrics and lead fields
+//   npm run score -- save <callId> <result.json> [--dry-run]
+//                                                 check the result, save score, metrics and lead fields
+//                                                 (--dry-run: check and print the score, save nothing)
 //
 // The result must match CallResultSchema (src/lib/scoring/schema.ts). Uses the secret key for
 // now; the nightly routine will use the restricted scoring_agent role.
@@ -93,8 +95,9 @@ if (command === "next") {
     ),
   );
 } else if (command === "save") {
-  const [callId, file] = args;
-  if (!callId || !file) throw new Error("Usage: npm run score -- save <callId> <result.json>");
+  const [callId, file] = args.filter((a) => !a.startsWith("--"));
+  const dryRun = args.includes("--dry-run");
+  if (!callId || !file) throw new Error("Usage: npm run score -- save <callId> <result.json> [--dry-run]");
   const { call, segments } = await loadCall(callId);
   const parsed = CallResultSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
   if (!parsed.success) {
@@ -115,15 +118,44 @@ if (command === "next") {
   const missing = expected.filter((id) => !result.coverage.some((c) => c.question === id));
   if (missing.length) throw new Error(`Coverage is missing questions: ${missing.join(", ")}`);
 
-  // Speaker roles onto the transcript, then the measured rules.
-  const roleOf = (label: string) => (agentLabels.includes(label) ? "agent" : clientLabels.includes(label) ? "client" : "unknown");
-  for (const label of labels) {
-    must(await db.from("transcript_segments").update({ role: roleOf(label) }).eq("call_id", callId).eq("speaker_label", label).select("idx"), "roles");
+  // No finding without evidence (brief section 7): every quote must be words from this transcript.
+  const plain = (text: string) => text.normalize("NFC").toLowerCase().replace(/[\p{P}\p{S}]/gu, " ").replace(/\s+/g, " ").trim();
+  const transcriptText = plain(segments.map((s) => s.text).join(" "));
+  const evidence = [
+    ...Object.values(result.areas).flatMap((a) => a.evidence),
+    ...result.coverage.flatMap((c) => c.evidence),
+    ...result.hardFails.flatMap((h) => h.evidence),
+    ...result.feedback.strengths.map((f) => f.evidence),
+    ...result.feedback.fixes.map((f) => f.evidence),
+  ];
+  const invented = evidence.filter((e) => !transcriptText.includes(plain(e.quote)));
+  if (invented.length) {
+    console.error("These quotes aren't in the transcript (copy the words exactly):");
+    for (const e of invented) console.error(`  [${e.at}] ${e.quote}`);
+    process.exit(1);
   }
+
+  const roleOf = (label: string) => (agentLabels.includes(label) ? "agent" : clientLabels.includes(label) ? "client" : "unknown");
   const metrics = computeMetrics(
     segments.map((s) => ({ role: roleOf(s.speaker_label), startSec: s.start_sec, endSec: s.end_sec, text: s.text })),
     call.duration_sec,
   );
+  const levels = Object.fromEntries(Object.entries(result.areas).map(([id, a]) => [id, a.level])) as Record<string, Level>;
+  const final = finaliseScore(call.stream, { levels, hardFails: result.hardFails.map((h) => h.id) }, metrics);
+  const summary =
+    `${final.score}/100, ${final.band}` +
+    (final.hardFails.length ? `, hard fails: ${final.hardFails.join(", ")}` : "") +
+    ` · client talked ${Math.round(metrics.clientShare * 100)}%` +
+    ` · ${Object.entries(final.levels).map(([id, level]) => `${id} ${level}`).join(", ")}`;
+  if (dryRun) {
+    console.log(`Checks passed (nothing saved): ${summary}`);
+    process.exit(0);
+  }
+
+  // Speaker roles onto the transcript, then the measured rules, the score and the lead's fields.
+  for (const label of labels) {
+    must(await db.from("transcript_segments").update({ role: roleOf(label) }).eq("call_id", callId).eq("speaker_label", label).select("idx"), "roles");
+  }
   must(
     await db
       .from("call_metrics")
@@ -141,9 +173,6 @@ if (command === "next") {
       .select("call_id"),
     "metrics",
   );
-
-  const levels = Object.fromEntries(Object.entries(result.areas).map(([id, a]) => [id, a.level])) as Record<string, Level>;
-  const final = finaliseScore(call.stream, { levels, hardFails: result.hardFails.map((h) => h.id) }, metrics);
   must(
     await db.rpc("record_call_score", {
       p_call_id: callId,
@@ -161,12 +190,8 @@ if (command === "next") {
   if (call.lead_id) {
     must(await db.rpc("record_lead_capture", { p_lead_id: call.lead_id, p_stream: call.stream, p_capture: result.capture as never }), "lead capture");
   }
-  console.log(
-    `Saved: ${final.score}/100, ${final.band}` +
-      (final.hardFails.length ? `, hard fails: ${final.hardFails.join(", ")}` : "") +
-      ` · client talked ${Math.round(metrics.clientShare * 100)}%`,
-  );
+  console.log(`Saved: ${summary}`);
 } else {
-  console.log("Usage: npm run score -- next [--call <id>] | save <callId> <result.json>  (see scripts/score.mts)");
+  console.log("Usage: npm run score -- next [--call <id>] | save <callId> <result.json> [--dry-run]  (see scripts/score.mts)");
   process.exitCode = 1;
 }
