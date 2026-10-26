@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getAdjacentDays, getFirstDay, getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
+import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
 import { formatClock, formatDay, hardFailLabel, parseDayParam } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
@@ -23,8 +23,14 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const [latest, first] = await Promise.all([getReportDay(), getFirstDay()]);
   const day = requested ?? latest;
   if (!day) return <EmptyState title="Team summary" />;
-  const [people, calls, previous, around] = await Promise.all([listPeople(), listCalls(day), previousDayAverages(day), getAdjacentDays(day)]);
-  const team = teamSummary(people, calls, previous);
+  const [people, calls, previous, around, sheets] = await Promise.all([
+    listPeople(),
+    listCalls(day),
+    previousDayAverages(day),
+    getAdjacentDays(day),
+    getActiveSheets(),
+  ]);
+  const team = teamSummary(people, calls, previous, sheets.questions);
   const scored = calls.filter((c) => c.final);
   const teamAverage = dayAverage(scored.map((c) => c.final!.score));
   const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "Unknown";

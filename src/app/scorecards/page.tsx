@@ -1,20 +1,16 @@
 import { Suspense } from "react";
 import { Card, PageHeader, StatTile } from "@/components/ui";
-import { getCalibration, requireMe } from "@/lib/data";
-import {
-  FIRST_CALL_SHEET_VERSION,
-  questionsFor,
-  VISION_CALL_SHEET_VERSION,
-  type Stream,
-} from "@/lib/scoring/call-sheets";
+import { getActiveSheets, getCalibration, requireMe } from "@/lib/data";
+import Link from "next/link";
+import type { Stream } from "@/lib/scoring/call-sheets";
 import { AMBER_FROM, GREEN_FROM } from "@/lib/scoring/compute";
 import { areasFor, hardFailsFor, RUBRIC_VERSION } from "@/lib/scoring/scorecards";
 
 export const metadata = { title: "Scorecards · DNY Sales Agent" };
 
-const STREAMS: { stream: Stream; title: string; sheet: string }[] = [
-  { stream: "first_call", title: "First Calls Executive", sheet: FIRST_CALL_SHEET_VERSION },
-  { stream: "vision_call", title: "Lead Consultant, Sales: vision call", sheet: VISION_CALL_SHEET_VERSION },
+const STREAMS: { stream: Stream; title: string }[] = [
+  { stream: "first_call", title: "First Calls Executive" },
+  { stream: "vision_call", title: "Lead Consultant, Sales: vision call" },
 ];
 
 export default function ScorecardsPage() {
@@ -28,7 +24,7 @@ export default function ScorecardsPage() {
         <CalibrationCard />
       </Suspense>
       <div className="space-y-8">
-        {STREAMS.map(({ stream, title, sheet }) => (
+        {STREAMS.map(({ stream, title }) => (
           <section key={stream} className="space-y-4">
             <h2 className="text-lg font-semibold">{title}</h2>
             <Card>
@@ -66,17 +62,9 @@ export default function ScorecardsPage() {
                   ))}
                 </ul>
               </Card>
-              <Card title={`Call sheet questions · ${sheet}`}>
-                <ol className="space-y-1 text-sm">
-                  {questionsFor(stream).map((q) => (
-                    <li key={q.id}>
-                      {q.number}. {q.question}
-                      {q.priority === "good_to_have" && <span className="text-muted"> (good to have)</span>}
-                      {q.runningBusinessOnly && <span className="text-muted"> (RB only)</span>}
-                    </li>
-                  ))}
-                </ol>
-              </Card>
+              <Suspense fallback={<Card title="Call sheet questions">Loading…</Card>}>
+                <SheetQuestionsCard stream={stream} />
+              </Suspense>
             </div>
           </section>
         ))}
@@ -118,5 +106,31 @@ async function CalibrationCard() {
         </div>
       )}
     </section>
+  );
+}
+
+/** The questions of the latest published call sheet: what calls are scored against now. */
+async function SheetQuestionsCard({ stream }: { stream: Stream }) {
+  const me = await requireMe();
+  const sheet = (await getActiveSheets())[stream];
+  return (
+    <Card title={`Call sheet questions · ${sheet.label}`}>
+      <ol className="space-y-1 text-sm">
+        {sheet.questions.map((q) => (
+          <li key={q.id}>
+            {q.number}. {q.question}
+            {q.priority === "good_to_have" && <span className="text-muted"> (good to have)</span>}
+            {q.runningBusinessOnly && <span className="text-muted"> (RB only)</span>}
+          </li>
+        ))}
+      </ol>
+      {me.canSeeAll && (
+        <p className="mt-3 text-xs">
+          <Link href="/sheets" className="text-brand hover:underline">
+            Upload or edit the call sheet
+          </Link>
+        </p>
+      )}
+    </Card>
   );
 }

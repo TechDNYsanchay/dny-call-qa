@@ -1,7 +1,7 @@
 // The daily QA report (brief section 6): one per person, plus the founders' team summary.
 // Pure functions over call records, so the same code builds the email and the screens.
 
-import { questionsFor } from "@/lib/scoring/call-sheets";
+import { questionsFor, type SheetQuestion } from "@/lib/scoring/call-sheets";
 import { band, dayAverage, type Band } from "@/lib/scoring/compute";
 import type { CallRecord, Person } from "@/lib/data/types";
 
@@ -55,8 +55,10 @@ function conversionFor(person: Person, scored: CallRecord[]): Conversion[] {
 }
 
 /** Mandatory questions only: good-to-have ones (like the aspirational brand) aren't counted as missed. */
-function missedQuestions(scored: CallRecord[]) {
-  const all = [...questionsFor("first_call"), ...questionsFor("vision_call")];
+/** Both sheets' built-in questions; pages and jobs pass the latest published ones instead. */
+export const BUILT_IN_QUESTIONS: SheetQuestion[] = [...questionsFor("first_call"), ...questionsFor("vision_call")];
+
+function missedQuestions(scored: CallRecord[], all: SheetQuestion[]) {
   const mandatory = new Set(all.filter((q) => q.priority === "must").map((q) => q.id));
   const counts = new Map<string, number>();
   for (const call of scored) {
@@ -69,7 +71,7 @@ function missedQuestions(scored: CallRecord[]) {
     .sort((a, b) => b.count - a.count);
 }
 
-export function personDayReport(person: Person, allCalls: CallRecord[]): PersonDayReport {
+export function personDayReport(person: Person, allCalls: CallRecord[], questions: SheetQuestion[] = BUILT_IN_QUESTIONS): PersonDayReport {
   const calls = allCalls.filter((c) => c.personId === person.id);
   const scored = calls.filter((c) => c.final).sort(byScore);
   const average = dayAverage(scored.map((c) => c.final!.score));
@@ -96,7 +98,7 @@ export function personDayReport(person: Person, allCalls: CallRecord[]): PersonD
     notRecorded: calls.filter((c) => c.notScored === "recording_missing").length,
     notScored: calls.filter((c) => c.notScored && c.notScored !== "recording_missing").length,
     conversion: conversionFor(person, scored),
-    missedQuestions: missedQuestions(scored),
+    missedQuestions: missedQuestions(scored, questions),
     avgClientSharePct: avgShare === null ? null : Math.round(avgShare * 100),
     avgLengthMin: avgLength === null ? null : Math.round(avgLength * 10) / 10,
     strengths,
@@ -125,9 +127,14 @@ export interface TeamSummary {
 /** Roles whose calls are scored; founders, managers and admins are readers, not rows. */
 const SCORED_ROLES: Person["role"][] = ["executive", "consultant"];
 
-export function teamSummary(people: Person[], calls: CallRecord[], previousDays: Record<string, number[]>): TeamSummary {
+export function teamSummary(
+  people: Person[],
+  calls: CallRecord[],
+  previousDays: Record<string, number[]>,
+  questions: SheetQuestion[] = BUILT_IN_QUESTIONS,
+): TeamSummary {
   const rows = people.filter((p) => SCORED_ROLES.includes(p.role)).map((person) => {
-    const report = personDayReport(person, calls);
+    const report = personDayReport(person, calls, questions);
     return { report, trend: [...(previousDays[person.id] ?? []).slice(-6), report.average] };
   });
 

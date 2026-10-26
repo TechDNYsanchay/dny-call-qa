@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, Quote, StatTile } from "@/components/ui";
-import { getAdjacentDays, getFirstDay, getPerson, getReportDay, listCalls, requireMe } from "@/lib/data";
+import { getActiveSheets, getAdjacentDays, getFirstDay, getPerson, getReportDay, listCalls, requireMe } from "@/lib/data";
 import { formatClock, formatDay, parseDayParam } from "@/lib/format";
 import { personDayReport } from "@/lib/reports";
 
@@ -23,8 +23,8 @@ async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[i
   const [latest, first] = await Promise.all([getReportDay(), getFirstDay()]);
   const day = parseDayParam((await searchParams).day) ?? latest;
   if (!day) return <EmptyState title={`${person.name}: daily QA report`} />;
-  const [calls, around] = await Promise.all([listCalls(day), getAdjacentDays(day, person.id)]);
-  const report = personDayReport(person, calls);
+  const [calls, around, sheets] = await Promise.all([listCalls(day), getAdjacentDays(day, person.id), getActiveSheets()]);
+  const report = personDayReport(person, calls, sheets.questions);
 
   return (
     <>

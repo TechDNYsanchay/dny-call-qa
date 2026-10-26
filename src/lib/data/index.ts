@@ -7,6 +7,8 @@ import { cache } from "react";
 import { formatPhone, istDayRange, toIst } from "@/lib/format";
 import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
 import { CallResultSchema, FirstCallCaptureSchema } from "@/lib/scoring/schema";
+import { activeSheet, sheetVersion, type Sheet } from "@/lib/scoring/sheets";
+import type { Stream } from "@/lib/scoring/call-sheets";
 import type { FirstCallCapture } from "@/lib/scoring/schema";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
 import type { CallRecord, Person, PersonRole } from "./types";
@@ -27,7 +29,7 @@ const CALL_FIELDS = `
   id, stream, person_id, agent_phone, client_phone, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
   leads ( name, city ),
   call_metrics ( * ),
-  call_scores ( score, band, levels, hard_fails, overrides, result,
+  call_scores ( score, band, levels, hard_fails, overrides, result, reference_version_ids,
     review_verdict, reviewed_at, override_reason, ai_score, ai_band, ai_levels, ai_hard_fails, reviewer:people ( full_name ) )
 `;
 
@@ -132,6 +134,7 @@ type CallRow = {
     hard_fails: string[];
     overrides: string[];
     result: unknown;
+    reference_version_ids: string[] | null;
     review_verdict: "agree" | "corrected" | null;
     reviewed_at: string | null;
     override_reason: string | null;
@@ -192,6 +195,7 @@ function toCallRecord(row: CallRow): CallRecord {
           overrides: row.call_scores!.overrides,
         }
       : undefined,
+    sheetVersionId: scored ? (row.call_scores!.reference_version_ids?.[0] ?? null) : undefined,
     review:
       scored && row.call_scores!.review_verdict && row.call_scores!.reviewed_at
         ? {
@@ -331,7 +335,21 @@ async function readPreviousDayAverages(db: Client, day: string): Promise<Record<
  * The same reads for the report jobs, which run with no viewer: the secret key, so row-level
  * security doesn't apply. Never use these to render a page.
  */
+async function readActiveSheets(db: Client) {
+  const [first_call, vision_call] = await Promise.all([activeSheet(db, "first_call"), activeSheet(db, "vision_call")]);
+  return { first_call, vision_call, questions: [...first_call.questions, ...vision_call.questions] };
+}
+
+/** The latest published FC-01 and LC-01 (what scoring uses now), plus both question lists together. */
+export const getActiveSheets = cache(async () => readActiveSheets(await supabaseUser()));
+
+/** The sheet a call was scored against, for its coverage list. */
+export async function getCallSheet(stream: Stream, versionId: string | null | undefined): Promise<Sheet> {
+  return sheetVersion(await supabaseUser(), stream, versionId);
+}
+
 export const pipelineReads = {
+  activeSheets: () => readActiveSheets(supabaseAdmin()),
   people: () => readPeople(supabaseAdmin()),
   calls: (day: string) => readCalls(supabaseAdmin(), day),
   callsBetween: (fromDay: string, toDay: string) => readCallsBetween(supabaseAdmin(), fromDay, toDay),
@@ -409,3 +427,44 @@ export const listLeads = cache(async (): Promise<LeadRow[]> => {
   }
   return rows.sort((a, b) => (b.lastCall?.startedAt ?? "").localeCompare(a.lastCall?.startedAt ?? ""));
 });
+
+export interface SheetVersionRow {
+  id: string;
+  stream: Stream;
+  version: number;
+  label: string;
+  notes: string | null;
+  storagePath: string | null;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+/** Every published call sheet version, newest first. */
+export const listSheetVersions = cache(async (): Promise<SheetVersionRow[]> => {
+  const { data, error } = await (await supabaseUser())
+    .from("reference_versions")
+    .select("id, kind, version, label, notes, storage_path, created_at, creator:people ( full_name )")
+    .in("kind", ["first_call_sheet", "vision_call_sheet"])
+    .not("questions", "is", null)
+    .order("version", { ascending: false });
+  if (error) fail("call sheet versions", error);
+  return (data as unknown as { id: string; kind: string; version: number; label: string; notes: string | null; storage_path: string | null; created_at: string; creator: { full_name: string } | null }[]).map((r) => ({
+    id: r.id,
+    stream: r.kind === "first_call_sheet" ? "first_call" : "vision_call",
+    version: r.version,
+    label: r.label,
+    notes: r.notes,
+    storagePath: r.storage_path,
+    createdAt: toIst(r.created_at),
+    createdBy: r.creator?.full_name ?? null,
+  }));
+});
+
+/** One-hour links to the sheet PDFs. Only for founders, managers and admins (checked by the caller). */
+export async function sheetPdfLinks(paths: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(paths)];
+  if (unique.length === 0) return {};
+  const { data, error } = await supabaseAdmin().storage.from("references").createSignedUrls(unique, 60 * 60);
+  if (error) fail("sheet links", error);
+  return Object.fromEntries(data.flatMap((d) => (d.path && d.signedUrl ? [[d.path, d.signedUrl]] : [])));
+}

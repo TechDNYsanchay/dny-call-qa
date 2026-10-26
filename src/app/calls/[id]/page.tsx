@@ -5,7 +5,7 @@ import { RecordingPlayer, Transcript } from "@/components/call-recording";
 import { ScoreReview } from "@/components/score-review";
 import { BandBadge, Card, Chip, Loading, PageHeader, Quote } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
-import { getCall, getPerson, requireMe, type CallRecord } from "@/lib/data";
+import { getCall, getCallSheet, getPerson, requireMe, type CallRecord } from "@/lib/data";
 import {
   formatClock,
   formatDay,
@@ -16,7 +16,7 @@ import {
   NOT_SCORED_LABEL,
   STREAM_LABEL,
 } from "@/lib/format";
-import { questionsFor } from "@/lib/scoring/call-sheets";
+import type { SheetQuestion } from "@/lib/scoring/call-sheets";
 import type { FirstCallResult } from "@/lib/scoring/schema";
 import { areasFor, hardFailsFor } from "@/lib/scoring/scorecards";
 
@@ -71,7 +71,7 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
       />
 
       {call.review && <ReviewBanner call={call} />}
-      {call.final && call.result ? <ScoredCall call={call} /> : null}
+      {call.final && call.result ? <ScoredCall call={call} sheet={await getCallSheet(call.stream, call.sheetVersionId)} /> : null}
       {call.final && me.canSeeAll && (
         <div className="mt-6">
           <ScoreReview
@@ -90,11 +90,11 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
   );
 }
 
-function ScoredCall({ call }: { call: CallRecord }) {
+function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string; questions: SheetQuestion[] } }) {
   const final = call.final!;
   const result = call.result!;
   const areaResults = result.areas as Record<string, AreaResult>;
-  const questions = questionsFor(call.stream);
+  const questions = sheet.questions;
 
   return (
     <div className="space-y-6">
@@ -231,7 +231,7 @@ function ScoredCall({ call }: { call: CallRecord }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card title={call.stream === "first_call" ? "First Call Sheet coverage" : "Vision Call Sheet coverage"}>
+        <Card title={`${call.stream === "first_call" ? "First Call Sheet" : "Vision Call Sheet"} coverage · ${sheet.label}`}>
           <ul className="space-y-2">
             {questions.map((q) => {
               const item = result.coverage.find((c) => c.question === q.id);

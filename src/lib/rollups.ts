@@ -3,7 +3,8 @@
 
 import type { CallRecord, Person } from "@/lib/data/types";
 import { addDays, formatDay } from "@/lib/format";
-import { personDayReport } from "@/lib/reports";
+import { BUILT_IN_QUESTIONS, personDayReport } from "@/lib/reports";
+import type { SheetQuestion } from "@/lib/scoring/call-sheets";
 import { band as bandFor, dayAverage, type Band } from "@/lib/scoring/compute";
 import { hardFailsFor } from "@/lib/scoring/scorecards";
 
@@ -113,9 +114,9 @@ const SCORED_ROLES: Person["role"][] = ["executive", "consultant"];
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const changeOf = (now: number | null, before: number | null) => (now === null || before === null ? null : round1(now - before));
 
-function personRollup(person: Person, calls: CallRecord[], previousCalls: CallRecord[], days: string[]): PersonRollup {
-  const report = personDayReport(person, calls);
-  const previousAverage = personDayReport(person, previousCalls).average;
+function personRollup(person: Person, calls: CallRecord[], previousCalls: CallRecord[], days: string[], questions: SheetQuestion[]): PersonRollup {
+  const report = personDayReport(person, calls, questions);
+  const previousAverage = personDayReport(person, previousCalls, questions).average;
   const byDay = (day: string) => dayAverage(report.scored.filter((c) => c.startedAt.slice(0, 10) === day).map((c) => c.final!.score));
   const firstCalls = report.scored.flatMap((c) => (c.result?.stream === "first_call" ? [c.result.capture] : []));
   return {
@@ -137,11 +138,17 @@ function personRollup(person: Person, calls: CallRecord[], previousCalls: CallRe
   };
 }
 
-export function rollup(period: Period, people: Person[], calls: CallRecord[], previousCalls: CallRecord[]): Rollup {
+export function rollup(
+  period: Period,
+  people: Person[],
+  calls: CallRecord[],
+  previousCalls: CallRecord[],
+  questions: SheetQuestion[] = BUILT_IN_QUESTIONS,
+): Rollup {
   const days = daysOf(period);
   const rows = people
     .filter((p) => SCORED_ROLES.includes(p.role))
-    .map((p) => personRollup(p, calls, previousCalls, days))
+    .map((p) => personRollup(p, calls, previousCalls, days, questions))
     .filter((r) => r.calls > 0)
     // Leaderboard: best average first; people with nothing scored last.
     .sort((a, b) => (b.average ?? -1) - (a.average ?? -1));
@@ -159,7 +166,7 @@ export function rollup(period: Period, people: Person[], calls: CallRecord[], pr
 
   const missed = new Map<string, { id: string; question: string; count: number }>();
   for (const p of people.filter((x) => SCORED_ROLES.includes(x.role))) {
-    for (const m of personDayReport(p, calls).missedQuestions) {
+    for (const m of personDayReport(p, calls, questions).missedQuestions) {
       const prev = missed.get(m.id);
       missed.set(m.id, { ...m, count: (prev?.count ?? 0) + m.count });
     }

@@ -416,6 +416,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["reference_kind"]
           label: string
           notes: string | null
+          questions: Json | null
           storage_path: string | null
           version: number
         }
@@ -426,6 +427,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["reference_kind"]
           label: string
           notes?: string | null
+          questions?: Json | null
           storage_path?: string | null
           version: number
         }
@@ -436,6 +438,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["reference_kind"]
           label?: string
           notes?: string | null
+          questions?: Json | null
           storage_path?: string | null
           version?: number
         }

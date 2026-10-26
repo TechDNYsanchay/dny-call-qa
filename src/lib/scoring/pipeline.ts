@@ -6,11 +6,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatTimestamp, toIst } from "@/lib/format";
 import type { Database } from "@/lib/supabase/database.types";
-import { expectedQuestions, FIRST_CALL_QUESTIONS, VISION_CALL_QUESTIONS, type Stream } from "./call-sheets";
+import type { Stream } from "./call-sheets";
 import { finaliseScore, type Level } from "./compute";
 import { computeMetrics, silences } from "./metrics";
 import { CallResultSchema, speakerLabels } from "./schema";
 import { areasFor, hardFailsFor, RUBRIC_VERSION } from "./scorecards";
+import { activeSheet, expectedFrom } from "./sheets";
 
 export type Db = SupabaseClient<Database>;
 
@@ -66,6 +67,8 @@ export async function scoringPackage(db: Db, callId: string) {
   const talk: Record<string, number> = {};
   for (const s of segments) talk[s.speaker_label] = (talk[s.speaker_label] ?? 0) + (s.end_sec - s.start_sec);
   const gaps = silences(segments.map((s) => ({ role: "unknown" as const, startSec: s.start_sec, endSec: s.end_sec, text: s.text })));
+  // The latest published call sheet; its questions are the ones coverage is judged against.
+  const sheet = await activeSheet(db, call.stream);
 
   return {
     call: {
@@ -83,8 +86,9 @@ export async function scoringPackage(db: Db, callId: string) {
     },
     rubric: {
       version: RUBRIC_VERSION,
+      callSheet: sheet.label,
       areas: areasFor(call.stream),
-      questions: call.stream === "first_call" ? FIRST_CALL_QUESTIONS : VISION_CALL_QUESTIONS,
+      questions: sheet.questions,
       hardFails: hardFailsFor(call.stream).filter((h) => !h.measured),
     },
     transcript: segments.map((s) => `[${formatTimestamp(s.start_sec)}] ${s.speaker_label}: ${s.text}`),
@@ -118,7 +122,8 @@ export async function checkAndSave(db: Db, callId: string, json: unknown, { dryR
   }
   if (agentLabels.some((l) => clientLabels.includes(l))) errors.push("A speaker can't be both the executive and the client");
 
-  const expected = expectedQuestions(call.stream, result.isRunningBusiness).map((q) => q.id);
+  const sheet = await activeSheet(db, call.stream);
+  const expected = expectedFrom(sheet.questions, result.isRunningBusiness).map((q) => q.id);
   const missing = expected.filter((id) => !result.coverage.some((c) => c.question === id));
   if (missing.length) errors.push(`Coverage is missing questions: ${missing.join(", ")}`);
 
@@ -171,7 +176,8 @@ export async function checkAndSave(db: Db, callId: string, json: unknown, { dryR
   const { error: scoreError } = await db.rpc("record_call_score", {
     p_call_id: callId,
     p_rubric_version: RUBRIC_VERSION,
-    p_reference_version_ids: [],
+    // The call sheet version scored against, so the call page shows those questions later.
+    p_reference_version_ids: sheet.versionId ? [sheet.versionId] : [],
     p_score: final.score,
     p_band: final.band,
     p_levels: final.levels,

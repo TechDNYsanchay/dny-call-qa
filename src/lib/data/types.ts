@@ -51,6 +51,8 @@ export interface CallRecord {
   metrics?: CallMetrics;
   result?: CallResult;
   final?: FinalScore;
+  /** The call sheet version this call was scored against (null: the built-in October 2026 sheet). */
+  sheetVersionId?: string | null;
   /** A founder's, manager's or admin's review of the AI's score (the brief's calibration). */
   review?: ScoreReview;
   notScored?: NotScoredReason;

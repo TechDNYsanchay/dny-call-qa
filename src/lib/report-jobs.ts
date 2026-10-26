@@ -36,10 +36,10 @@ export async function buildDailyReports(day: string): Promise<BuildResult> {
     .select("id");
   if (flagError) throw new Error(`flag missing recordings: ${flagError.message}`);
 
-  const [people, calls] = await Promise.all([pipelineReads.people(), pipelineReads.calls(day)]);
+  const [people, calls, sheets] = await Promise.all([pipelineReads.people(), pipelineReads.calls(day), pipelineReads.activeSheets()]);
   let reportsStored = 0;
   for (const person of people.filter((p) => SCORED_ROLES.includes(p.role))) {
-    const report = personDayReport(person, calls);
+    const report = personDayReport(person, calls, sheets.questions);
     if (report.calls.length === 0) continue;
     const { error } = await db.from("daily_reports").upsert(
       {
@@ -76,7 +76,12 @@ export interface SendResult {
 export async function sendDailyReports(day: string, { preview = false, limit = Infinity } = {}): Promise<SendResult> {
   const db = supabaseAdmin();
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
-  const [people, calls, previous] = await Promise.all([pipelineReads.people(), pipelineReads.calls(day), pipelineReads.previousDayAverages(day)]);
+  const [people, calls, previous, sheets] = await Promise.all([
+    pipelineReads.people(),
+    pipelineReads.calls(day),
+    pipelineReads.previousDayAverages(day),
+    pipelineReads.activeSheets(),
+  ]);
   const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
 
   // The nightly scoring should have finished by now; say so if calls are still waiting.
@@ -110,14 +115,14 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
 
   // Each person who made calls that day gets their own report.
   for (const person of people.filter((p) => SCORED_ROLES.includes(p.role))) {
-    const report = personDayReport(person, calls);
+    const report = personDayReport(person, calls, sheets.questions);
     if (report.calls.length === 0) continue;
     await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site));
   }
 
   // Founders, managers and admins get the team summary (one copy when REPORTS_TO is set).
   if (calls.length > 0) {
-    const email = teamSummaryEmail(teamSummary(people, calls, previous), day, site);
+    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site);
     const readers = people.filter((p) => READER_ROLES.includes(p.role));
     const targets = process.env.REPORTS_TO ? [{ name: "test inbox", email: null }] : readers;
     if (targets.length === 0) result.skipped.push({ kind: "team", who: "founders", why: "no founder, manager or admin on the team list" });
@@ -138,9 +143,10 @@ export async function sendRollups(period: Period, { preview = false, limit = Inf
     pipelineReads.callsBetween(period.from, period.to),
     pipelineReads.callsBetween(period.previous.from, period.previous.to),
   ]);
+  const sheets = await pipelineReads.activeSheets();
   const result: SendResult = { day: period.from, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
   if (calls.length === 0) return result;
-  const r = rollup(period, people, calls, previousCalls);
+  const r = rollup(period, people, calls, previousCalls, sheets.questions);
 
   const { data: alreadySent, error } = await db.from("report_sends").select("kind, subject_key, recipient").eq("report_date", period.from);
   if (error) throw new Error(`report sends: ${error.message}`);

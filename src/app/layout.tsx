@@ -55,6 +55,7 @@ async function SignedInNav() {
         { href: "/calls", label: "Calls" },
         { href: "/leads", label: "Leads" },
         { href: "/rollups", label: "Roll-ups" },
+        { href: "/sheets", label: "Call sheets" },
         { href: "/scorecards", label: "Scorecards" },
       ]
     : [

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { BandBadge, Card, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getReportDay, listCallsBetween, listPeople, requireMe } from "@/lib/data";
+import { getActiveSheets, getReportDay, listCallsBetween, listPeople, requireMe } from "@/lib/data";
 import { formatClock, formatDay } from "@/lib/format";
 import { daysOf, monthPeriod, rollup, weekPeriod, type Period } from "@/lib/rollups";
 
@@ -37,12 +37,13 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
   const latest = await getReportDay();
   if (!latest) return <EmptyState title="Roll-ups" />;
   const period = periodFrom(await searchParams, latest);
-  const [people, calls, previousCalls] = await Promise.all([
+  const [sheets, people, calls, previousCalls] = await Promise.all([
+    getActiveSheets(),
     listPeople(),
     listCallsBetween(period.from, period.to),
     listCallsBetween(period.previous.from, period.previous.to),
   ]);
-  const r = rollup(period, people, calls, previousCalls);
+  const r = rollup(period, people, calls, previousCalls, sheets.questions);
   const days = daysOf(period);
   const dayLabels = days.map((d) => formatDay(d).replace(/ \d{4}$/, ""));
   const hasNext = period.next !== null && period.next.from <= latest;
