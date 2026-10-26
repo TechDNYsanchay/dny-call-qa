@@ -30,7 +30,7 @@ const CALL_FIELDS = `
   leads ( name, city ),
   call_metrics ( * ),
   call_scores ( score, band, levels, hard_fails, overrides, result, reference_version_ids,
-    review_verdict, reviewed_at, override_reason, ai_score, ai_band, ai_levels, ai_hard_fails, reviewer:people ( full_name ) )
+    review_verdict, reviewed_at, override_reason, ai_score, ai_band, ai_levels, ai_hard_fails, reviewer:people!call_scores_overridden_by_fkey ( full_name ) )
 `;
 
 function fail(what: string, error: { message: string }): never {

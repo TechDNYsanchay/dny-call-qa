@@ -57,6 +57,35 @@ export type Database = {
         }
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_metrics: {
         Row: {
           agent_share_first_half: number
@@ -115,6 +144,10 @@ export type Database = {
           ai_score: number | null
           band: Database["public"]["Enums"]["score_band"]
           call_id: string
+          dispute_comment: string | null
+          dispute_resolved_at: string | null
+          disputed_at: string | null
+          disputed_by: string | null
           hard_fails: string[]
           levels: Json
           overridden_by: string | null
@@ -135,6 +168,10 @@ export type Database = {
           ai_score?: number | null
           band: Database["public"]["Enums"]["score_band"]
           call_id: string
+          dispute_comment?: string | null
+          dispute_resolved_at?: string | null
+          disputed_at?: string | null
+          disputed_by?: string | null
           hard_fails?: string[]
           levels: Json
           overridden_by?: string | null
@@ -155,6 +192,10 @@ export type Database = {
           ai_score?: number | null
           band?: Database["public"]["Enums"]["score_band"]
           call_id?: string
+          dispute_comment?: string | null
+          dispute_resolved_at?: string | null
+          disputed_at?: string | null
+          disputed_by?: string | null
           hard_fails?: string[]
           levels?: Json
           overridden_by?: string | null
@@ -174,6 +215,13 @@ export type Database = {
             columns: ["call_id"]
             isOneToOne: true
             referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_scores_disputed_by_fkey"
+            columns: ["disputed_by"]
+            isOneToOne: false
+            referencedRelation: "people"
             referencedColumns: ["id"]
           },
           {
@@ -324,10 +372,12 @@ export type Database = {
           first_call_capture: Json | null
           id: string
           name: string | null
+          notes: string | null
           owner_id: string | null
           phone: string | null
           stage: number | null
           status: string
+          status_updated_at: string | null
           updated_at: string
           value_inr: number | null
           vision_call_capture: Json | null
@@ -339,10 +389,12 @@ export type Database = {
           first_call_capture?: Json | null
           id?: string
           name?: string | null
+          notes?: string | null
           owner_id?: string | null
           phone?: string | null
           stage?: number | null
           status?: string
+          status_updated_at?: string | null
           updated_at?: string
           value_inr?: number | null
           vision_call_capture?: Json | null
@@ -354,10 +406,12 @@ export type Database = {
           first_call_capture?: Json | null
           id?: string
           name?: string | null
+          notes?: string | null
           owner_id?: string | null
           phone?: string | null
           stage?: number | null
           status?: string
+          status_updated_at?: string | null
           updated_at?: string
           value_inr?: number | null
           vision_call_capture?: Json | null
