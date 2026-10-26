@@ -2,8 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { BandBadge, Card, Loading, PageHeader } from "@/components/ui";
 import { BUDGET, CLIENT_TYPE, FORMAT } from "@/lib/capture";
-import { listLeads, listPeople, requireMe } from "@/lib/data";
-import { formatDay, formatPhone } from "@/lib/format";
+import { LEAD_STATUSES, listLeads, listPeople, requireMe, type LeadStatus } from "@/lib/data";
+import { formatDay, formatPhone, LEAD_STATUS_LABEL } from "@/lib/format";
 
 export const metadata = { title: "Leads · DNY Sales Agent" };
 
@@ -22,11 +22,18 @@ export default function LeadsPage({ searchParams }: PageProps<"/leads">) {
 
 async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">) {
   const me = await requireMe();
-  const requested = (await searchParams).quality;
-  const quality = QUALITY.find((q) => q === requested) ?? null;
+  const params = await searchParams;
+  const quality = QUALITY.find((q) => q === params.quality) ?? null;
+  const status = LEAD_STATUSES.find((s) => s === params.status) ?? null;
   const [leads, people] = await Promise.all([listLeads(), listPeople()]);
-  const shown = quality ? leads.filter((l) => l.capture.leadQuality === quality) : leads;
-  const count = (q: Quality) => leads.filter((l) => l.capture.leadQuality === q).length;
+  const byStatus = status ? leads.filter((l) => l.status === status) : leads;
+  const shown = quality ? byStatus.filter((l) => l.capture.leadQuality === quality) : byStatus;
+  const count = (q: Quality) => byStatus.filter((l) => l.capture.leadQuality === q).length;
+  const statusCount = (s: LeadStatus) => leads.filter((l) => l.status === s).length;
+  const href = (q: Quality | null, s: LeadStatus | null) => {
+    const query = new URLSearchParams({ ...(q ? { quality: q } : {}), ...(s ? { status: s } : {}) }).toString();
+    return query ? `/leads?${query}` : "/leads";
+  };
   const nameOf = (id: string | null) => people.find((p) => p.id === id)?.name ?? "Not on the team list";
 
   return (
@@ -35,11 +42,24 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
         title={me.canSeeAll ? "Leads" : "My leads"}
         subtitle={`${shown.length} of ${leads.length} leads · captured from scored first calls, latest call first`}
       >
+        <div className="flex flex-wrap gap-2">
+        <nav aria-label="Lead status" className="inline-flex flex-wrap overflow-hidden rounded-md border border-border bg-surface text-sm">
+          {[null, ...LEAD_STATUSES].map((s, i) => (
+            <Link
+              key={s ?? "all"}
+              href={href(quality, s)}
+              aria-current={status === s ? "true" : undefined}
+              className={`px-2.5 py-1 ${i > 0 ? "border-l border-border" : ""} ${status === s ? "bg-background font-medium" : "text-muted hover:text-foreground"}`}
+            >
+              {s ? `${LEAD_STATUS_LABEL[s]} ${statusCount(s)}` : "Any status"}
+            </Link>
+          ))}
+        </nav>
         <nav aria-label="Lead quality" className="inline-flex overflow-hidden rounded-md border border-border bg-surface text-sm">
           {[null, ...QUALITY].map((q, i) => (
             <Link
               key={q ?? "all"}
-              href={q ? `/leads?quality=${q}` : "/leads"}
+              href={href(q, status)}
               aria-current={quality === q ? "true" : undefined}
               className={`px-2.5 py-1 ${i > 0 ? "border-l border-border" : ""} ${quality === q ? "bg-background font-medium" : "text-muted hover:text-foreground"}`}
             >
@@ -47,17 +67,19 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
             </Link>
           ))}
         </nav>
+        </div>
       </PageHeader>
 
       <Card>
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[940px] text-sm">
             <thead className="text-left text-xs text-muted">
               <tr className="border-b border-border">
                 <th className="px-4 py-2 font-medium sm:px-5">Lead</th>
                 <th className="px-2 py-2 font-medium">What they want</th>
                 <th className="px-2 py-2 font-medium">Budget</th>
                 <th className="px-2 py-2 font-medium">Quality</th>
+                <th className="px-2 py-2 font-medium">Status</th>
                 <th className="px-2 py-2 font-medium">Meeting</th>
                 <th className="px-4 py-2 font-medium sm:px-5">Last scored call</th>
               </tr>
@@ -69,7 +91,9 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
                 return (
                   <tr key={lead.id} className="border-b border-border align-top last:border-0">
                     <td className="px-4 py-3 sm:px-5">
-                      <div className="font-medium">{c.clientName ?? (lead.phone ? formatPhone(lead.phone) : "Unknown")}</div>
+                      <Link href={`/leads/${lead.id}`} className="font-medium hover:underline">
+                        {c.clientName ?? (lead.phone ? formatPhone(lead.phone) : "Unknown")}
+                      </Link>
                       <div className="text-xs text-muted">
                         {[c.city, c.clientName && lead.phone ? formatPhone(lead.phone) : null, lead.email].filter(Boolean).join(" · ")}
                       </div>
@@ -81,6 +105,9 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
                     <td className="px-2 py-3">{c.budgetBand ? BUDGET[c.budgetBand] : <span className="text-muted">–</span>}</td>
                     <td className="px-2 py-3">
                       {c.leadQuality ? <span className={c.leadQuality === "hot" ? "font-medium" : ""}>{QUALITY_LABEL[c.leadQuality]}</span> : "–"}
+                    </td>
+                    <td className="px-2 py-3">
+                      <span className={lead.status === "won" ? "font-medium" : lead.status === "lost" ? "text-muted" : ""}>{LEAD_STATUS_LABEL[lead.status]}</span>
                     </td>
                     <td className="px-2 py-3">{c.vcDateTime ?? <span className="text-muted">Not fixed</span>}</td>
                     <td className="px-4 py-3 sm:px-5">
@@ -106,8 +133,8 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
               })}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted sm:px-5">
-                    {leads.length === 0 ? "No leads yet: they appear once calls are scored." : "No leads with this quality."}
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted sm:px-5">
+                    {leads.length === 0 ? "No leads yet: they appear once calls are scored." : "No leads match these filters."}
                   </td>
                 </tr>
               )}

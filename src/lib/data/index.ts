@@ -11,9 +11,10 @@ import { activeSheet, sheetVersion, type Sheet } from "@/lib/scoring/sheets";
 import type { Stream } from "@/lib/scoring/call-sheets";
 import type { FirstCallCapture } from "@/lib/scoring/schema";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
-import type { CallRecord, Person, PersonRole } from "./types";
+import type { CallRecord, LeadStatus, Person, PersonRole } from "./types";
 
-export type { CallRecord, Person } from "./types";
+export type { CallRecord, LeadStatus, Person } from "./types";
+export { LEAD_STATUSES } from "./types";
 
 const TITLE: Record<PersonRole, string> = {
   founder: "Founder",
@@ -26,11 +27,12 @@ const SAMPLE_EMAIL_DOMAIN = "@sample.invalid";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CALL_FIELDS = `
-  id, stream, person_id, agent_phone, client_phone, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
-  leads ( name, city ),
+  id, stream, person_id, agent_phone, client_phone, lead_id, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
+  leads ( name, city, status ),
   call_metrics ( * ),
   call_scores ( score, band, levels, hard_fails, overrides, result, reference_version_ids,
-    review_verdict, reviewed_at, override_reason, ai_score, ai_band, ai_levels, ai_hard_fails, reviewer:people!call_scores_overridden_by_fkey ( full_name ) )
+    review_verdict, reviewed_at, override_reason, ai_score, ai_band, ai_levels, ai_hard_fails, reviewer:people!call_scores_overridden_by_fkey ( full_name ),
+    dispute_comment, disputed_at, dispute_resolved_at, disputer:people!call_scores_disputed_by_fkey ( full_name ) )
 `;
 
 function fail(what: string, error: { message: string }): never {
@@ -107,6 +109,7 @@ type CallRow = {
   person_id: string | null;
   agent_phone: string | null;
   client_phone: string | null;
+  lead_id: string | null;
   started_at: string;
   duration_sec: number;
   recording_status: CallRecord["recordingStatus"];
@@ -116,7 +119,7 @@ type CallRow = {
   transcript_status: "not_needed" | "pending" | "processing" | "done" | "failed";
   scoring_status: "not_eligible" | "waiting" | "ready" | "scored" | "failed";
   not_scored_reason: string | null;
-  leads: { name: string | null; city: string | null } | null;
+  leads: { name: string | null; city: string | null; status: LeadStatus } | null;
   call_metrics: {
     agent_talk_sec: number;
     client_talk_sec: number;
@@ -143,6 +146,10 @@ type CallRow = {
     ai_levels: unknown;
     ai_hard_fails: string[] | null;
     reviewer: { full_name: string } | null;
+    dispute_comment: string | null;
+    disputed_at: string | null;
+    dispute_resolved_at: string | null;
+    disputer: { full_name: string } | null;
   } | null;
   transcript_segments?: { speaker_label: string; role: string; start_sec: number; end_sec: number; text: string; topic: string | null }[];
 };
@@ -214,6 +221,17 @@ function toCallRecord(row: CallRow): CallRecord {
                 : null,
           }
         : undefined,
+    dispute:
+      scored && row.call_scores!.dispute_comment && row.call_scores!.disputed_at
+        ? {
+            comment: row.call_scores!.dispute_comment,
+            by: row.call_scores!.disputer?.full_name ?? null,
+            at: toIst(row.call_scores!.disputed_at),
+            resolvedAt: row.call_scores!.dispute_resolved_at ? toIst(row.call_scores!.dispute_resolved_at) : null,
+          }
+        : undefined,
+    leadId: row.lead_id ?? undefined,
+    leadStatus: row.leads?.status,
     notScored: row.scoring_status === "not_eligible" ? ((row.not_scored_reason ?? undefined) as NotScoredReason | undefined) : undefined,
     inProgress:
       row.scoring_status === "waiting" || row.scoring_status === "ready"
@@ -388,10 +406,12 @@ export const getCalibration = cache(async (): Promise<Calibration> => {
   };
 });
 
+
 export interface LeadRow {
   id: string;
   phone: string | null;
   email: string | null;
+  status: LeadStatus;
   /** What the latest scored first call captured (record_lead_capture). */
   capture: FirstCallCapture;
   lastCall: { id: string; startedAt: string; personId: string | null; score: number | null; band: Band | null } | null;
@@ -402,10 +422,10 @@ export interface LeadRow {
 export const listLeads = cache(async (): Promise<LeadRow[]> => {
   const { data, error } = await (await supabaseUser())
     .from("leads")
-    .select("id, phone, email, first_call_capture, calls ( id, started_at, person_id, call_scores ( score, band ) )")
+    .select("id, phone, email, status, first_call_capture, calls ( id, started_at, person_id, call_scores ( score, band ) )")
     .not("first_call_capture", "is", null);
   if (error) fail("leads", error);
-  type Row = { id: string; phone: string | null; email: string | null; first_call_capture: unknown;
+  type Row = { id: string; phone: string | null; email: string | null; status: LeadStatus; first_call_capture: unknown;
     calls: { id: string; started_at: string; person_id: string | null; call_scores: { score: number; band: Band } | null }[] };
   const rows: LeadRow[] = [];
   for (const lead of data as unknown as Row[]) {
@@ -418,6 +438,7 @@ export const listLeads = cache(async (): Promise<LeadRow[]> => {
       id: lead.id,
       phone: lead.phone,
       email: lead.email,
+      status: lead.status,
       capture: capture.data,
       callCount: lead.calls.length,
       lastCall: last
@@ -467,4 +488,135 @@ export async function sheetPdfLinks(paths: string[]): Promise<Record<string, str
   const { data, error } = await supabaseAdmin().storage.from("references").createSignedUrls(unique, 60 * 60);
   if (error) fail("sheet links", error);
   return Object.fromEntries(data.flatMap((d) => (d.path && d.signedUrl ? [[d.path, d.signedUrl]] : [])));
+}
+
+export interface TeamMember extends Person {
+  email: string | null;
+  callyzerPhone: string | null;
+  tldvEmail: string | null;
+  active: boolean;
+  canSignIn: boolean;
+}
+
+/** Everyone on the team list, paused people too, for the Team members page (founders and admins see all). */
+export const listTeamMembers = cache(async (): Promise<TeamMember[]> => {
+  const { data, error } = await (await supabaseUser())
+    .from("people")
+    .select("id, full_name, role, email, callyzer_phone, tldv_email, active, auth_user_id")
+    .order("active", { ascending: false })
+    .order("role")
+    .order("full_name");
+  if (error) fail("team members", error);
+  return data.map((p) => ({
+    id: p.id,
+    name: p.full_name,
+    role: p.role,
+    title: TITLE[p.role],
+    email: p.email,
+    callyzerPhone: p.callyzer_phone,
+    tldvEmail: p.tldv_email,
+    active: p.active,
+    canSignIn: Boolean(p.auth_user_id && p.email),
+  }));
+});
+
+/** Search text made safe for a filter: no characters PostgREST treats as syntax or wildcards. */
+export function searchTerm(raw: string): string {
+  return raw.replace(/[,()*%_\\:"'.]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+}
+
+export interface SearchResults {
+  leads: LeadRow[];
+  calls: CallRecord[];
+}
+
+/** Leads and calls matching a name, phone, email, city or concept. Row-level security limits executives to their own. */
+export const search = cache(async (raw: string): Promise<SearchResults> => {
+  const term = searchTerm(raw);
+  if (term.length < 2) return { leads: [], calls: [] };
+  const digits = term.replace(/\D/g, "");
+  const supabase = await supabaseUser();
+  const text = `*${term}*`;
+  const leadFilters = [
+    `name.ilike.${text}`,
+    `email.ilike.${text}`,
+    `first_call_capture->>clientName.ilike.${text}`,
+    `first_call_capture->>city.ilike.${text}`,
+    `first_call_capture->>concept.ilike.${text}`,
+    ...(digits.length >= 4 ? [`phone.ilike.*${digits}*`] : []),
+  ].join(",");
+  const [{ data: leadIds, error: leadError }, { data: callRows, error: callError }] = await Promise.all([
+    supabase.from("leads").select("id").or(leadFilters).limit(40),
+    digits.length >= 4
+      ? supabase.from("calls").select(CALL_FIELDS).ilike("client_phone", `%${digits}%`).order("started_at", { ascending: false }).limit(20)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (leadError) fail("search leads", leadError);
+  if (callError) fail("search calls", callError);
+  const ids = new Set(leadIds.map((l) => l.id));
+  const leads = (await listLeads()).filter((l) => ids.has(l.id));
+  return { leads, calls: (callRows as unknown as CallRow[]).map(toCallRecord) };
+});
+
+/** Scores executives have disputed that no founder has reviewed yet, oldest first. */
+export const listOpenDisputes = cache(async (): Promise<CallRecord[]> => {
+  const supabase = await supabaseUser();
+  const { data: open, error } = await supabase
+    .from("call_scores")
+    .select("call_id")
+    .not("dispute_comment", "is", null)
+    .is("dispute_resolved_at", null)
+    .order("disputed_at")
+    .limit(50);
+  if (error) fail("disputes", error);
+  if (open.length === 0) return [];
+  const { data: rows, error: callsError } = await supabase.from("calls").select(CALL_FIELDS).in("id", open.map((r) => r.call_id));
+  if (callsError) fail("disputed calls", callsError);
+  const calls = (rows as unknown as CallRow[]).map(toCallRecord);
+  return calls.sort((a, b) => (a.dispute?.at ?? "").localeCompare(b.dispute?.at ?? ""));
+});
+
+export interface LeadDetail {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  status: LeadStatus;
+  stage: 1 | 2 | null;
+  ownerId: string | null;
+  valueInr: number | null;
+  notes: string | null;
+  statusUpdatedAt: string | null;
+  capture: FirstCallCapture | null;
+  calls: CallRecord[];
+}
+
+/** One lead with every call to it that the viewer may see. */
+export async function getLead(id: string): Promise<LeadDetail | null> {
+  if (!UUID.test(id)) return null;
+  const supabase = await supabaseUser();
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, name, phone, email, status, stage, owner_id, value_inr, notes, status_updated_at, first_call_capture")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) fail("lead", error);
+  if (!data) return null;
+  const { data: calls, error: callsError } = await supabase.from("calls").select(CALL_FIELDS).eq("lead_id", id).order("started_at", { ascending: false });
+  if (callsError) fail("lead calls", callsError);
+  const capture = FirstCallCaptureSchema.safeParse(data.first_call_capture);
+  return {
+    id: data.id,
+    name: data.name,
+    phone: data.phone,
+    email: data.email,
+    status: data.status as LeadStatus,
+    stage: (data.stage as 1 | 2 | null) ?? null,
+    ownerId: data.owner_id,
+    valueInr: data.value_inr === null ? null : Number(data.value_inr),
+    notes: data.notes,
+    statusUpdatedAt: data.status_updated_at ? toIst(data.status_updated_at) : null,
+    capture: capture.success ? capture.data : null,
+    calls: (calls as unknown as CallRow[]).map(toCallRecord),
+  };
 }

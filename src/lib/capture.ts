@@ -33,7 +33,7 @@ export const ROUTE: Record<string, string> = {
   founder_stage2: "Founder (Stage 2)",
 };
 
-function firstCallRows(c: FirstCallResult["capture"]): CaptureRow[] {
+export function firstCallRows(c: FirstCallResult["capture"]): CaptureRow[] {
   const property = c.property
     ? [
         c.property.finalised === null ? null : c.property.finalised ? "Finalised" : "Not finalised",

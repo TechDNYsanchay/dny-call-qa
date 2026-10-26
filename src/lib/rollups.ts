@@ -1,7 +1,7 @@
 // Weekly and monthly roll-ups (the plan's Monday roll-up and month-end trend). Pure, over the same
 // call records as the daily report, so founders' corrections carry through.
 
-import type { CallRecord, Person } from "@/lib/data/types";
+import type { CallRecord, LeadStatus, Person } from "@/lib/data/types";
 import { addDays, formatDay } from "@/lib/format";
 import { BUILT_IN_QUESTIONS, personDayReport } from "@/lib/reports";
 import type { SheetQuestion } from "@/lib/scoring/call-sheets";
@@ -108,6 +108,67 @@ export interface Rollup {
   vcsBooked: number;
   missed: { id: string; question: string; count: number }[];
   reviews: { agreed: number; corrected: number };
+  funnel: Funnel;
+}
+
+/**
+ * From calls to won deals. Calls count calls; the lead stages count each client once. A lead
+ * counts at the furthest stage it has reached, so every stage includes the ones after it. Lead
+ * status is today's, set on the lead page.
+ */
+export interface Funnel {
+  calls: number;
+  connected: number;
+  leads: number;
+  qualified: number;
+  vcBooked: number;
+  vcHeld: number;
+  proposal: number;
+  won: number;
+  lost: number;
+}
+
+/** The lead stages after "leads reached", in order. */
+export const FUNNEL_STAGES = [
+  { key: "qualified", label: "Qualified", means: "hot or warm on a first call" },
+  { key: "vcBooked", label: "Vision call booked", means: "a time fixed on the call" },
+  { key: "vcHeld", label: "Vision call held", means: "marked on the lead page" },
+  { key: "proposal", label: "Proposal sent", means: "marked on the lead page" },
+  { key: "won", label: "Won", means: "marked on the lead page" },
+] as const satisfies readonly { key: keyof Funnel; label: string; means: string }[];
+
+/** Whole-number share, e.g. 3 of 12 -> 25. */
+export const pctOf = (n: number, of: number) => (of > 0 ? Math.round((n / of) * 100) : 0);
+
+const STATUS_STAGE: Record<LeadStatus, number> = { open: 0, lost: 0, vc_held: 3, proposal: 4, won: 5 };
+
+export function funnel(calls: CallRecord[]): Funnel {
+  const connected = calls.filter((c) => c.durationSec > 0);
+  const stage = new Map<string, number>();
+  const lost = new Set<string>();
+  for (const c of connected) {
+    if (!c.leadId) continue;
+    const capture = c.final && c.result?.stream === "first_call" ? c.result.capture : null;
+    const reached = Math.max(
+      stage.get(c.leadId) ?? 0,
+      capture?.vcDateTime ? 2 : capture?.leadQuality === "hot" || capture?.leadQuality === "warm" ? 1 : 0,
+      c.leadStatus ? STATUS_STAGE[c.leadStatus] : 0,
+    );
+    stage.set(c.leadId, reached);
+    if (c.leadStatus === "lost") lost.add(c.leadId);
+  }
+  const atLeast = (n: number) => [...stage.values()].filter((s) => s >= n).length;
+  return {
+    calls: calls.length,
+    connected: connected.length,
+    leads: stage.size,
+    qualified: atLeast(1),
+    vcBooked: atLeast(2),
+    vcHeld: atLeast(3),
+    proposal: atLeast(4),
+    won: atLeast(5),
+    lost: lost.size,
+  };
 }
 
 const SCORED_ROLES: Person["role"][] = ["executive", "consultant"];
@@ -190,5 +251,6 @@ export function rollup(
       agreed: scored.filter((c) => c.review?.verdict === "agree").length,
       corrected: scored.filter((c) => c.review?.verdict === "corrected").length,
     },
+    funnel: funnel(calls),
   };
 }

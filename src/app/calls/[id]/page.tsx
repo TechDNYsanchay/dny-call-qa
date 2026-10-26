@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { RecordingPlayer, Transcript } from "@/components/call-recording";
+import { DisputeForm } from "@/components/score-dispute";
 import { ScoreReview } from "@/components/score-review";
 import { BandBadge, Card, Chip, Loading, PageHeader, Quote } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
@@ -70,19 +71,25 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
         }
       />
 
+      {call.dispute && <DisputeBanner call={call} mine={call.personId === me.id} />}
       {call.review && <ReviewBanner call={call} />}
       {call.final && call.result ? <ScoredCall call={call} sheet={await getCallSheet(call.stream, call.sheetVersionId)} /> : null}
       {call.final && me.canSeeAll && (
         <div className="mt-6">
           <ScoreReview
             callId={call.id}
-            reviewed={Boolean(call.review)}
+            reviewed={Boolean(call.review) && !(call.dispute && !call.dispute.resolvedAt)}
             aiScore={call.review?.verdict === "corrected" ? call.review.ai?.score : undefined}
             areas={areasFor(call.stream).map((a) => ({ id: a.id, name: a.name, weight: a.weight, level: call.final!.levels[a.id] }))}
             hardFails={hardFailsFor(call.stream)
               .filter((h) => !h.measured)
               .map((h) => ({ id: h.id, label: h.label, on: call.final!.hardFails.includes(h.id) }))}
           />
+        </div>
+      )}
+      {call.final && call.personId === me.id && !(call.dispute && !call.dispute.resolvedAt) && (
+        <div className="mt-6">
+          <DisputeForm callId={call.id} />
         </div>
       )}
       {call.transcript.length > 0 && <Transcript lines={call.transcript} />}
@@ -273,6 +280,27 @@ function Measure({ label, value }: { label: string; value: string }) {
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
+  );
+}
+
+/** The executive's challenge to the score, open until a founder reviews the call. */
+function DisputeBanner({ call, mine }: { call: CallRecord; mine: boolean }) {
+  const d = call.dispute!;
+  const who = mine ? "You" : (d.by ?? "The executive");
+  const when = `${formatDay(d.at)}, ${formatClock(d.at)}`;
+  return (
+    <Card className={`mb-6 ${d.resolvedAt ? "" : "border-brand/50"}`}>
+      <p className="text-sm">
+        <span className="font-medium">{d.resolvedAt ? "Disputed, answered:" : "⚑ Disputed:"}</span> {who} disputed this score{" "}
+        <span className="text-muted">· {when}</span>
+      </p>
+      <p className="mt-1 text-sm text-muted">“{d.comment}”</p>
+      {!d.resolvedAt && (
+        <p className="mt-2 text-xs text-muted">
+          {mine ? "The founders have been told; their review will show here." : "Agree with the score or correct it below; either answers the dispute."}
+        </p>
+      )}
+    </Card>
   );
 }
 

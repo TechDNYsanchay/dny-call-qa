@@ -1,7 +1,7 @@
 // Display helpers. None of them reads the current time (Date.now() or new Date()),
 // which Next.js does not allow while prerendering.
 
-import type { InProgress } from "@/lib/data/types";
+import type { InProgress, LeadStatus } from "@/lib/data/types";
 import type { Stream } from "@/lib/scoring/call-sheets";
 import type { NotScoredReason } from "@/lib/scoring/compute";
 import { hardFailsFor } from "@/lib/scoring/scorecards";
@@ -84,6 +84,14 @@ export const IN_PROGRESS_LABEL: Record<InProgress, string> = {
   transcription: "Waiting for transcription",
   transcription_failed: "Transcription failed",
   scoring: "Waiting for tonight's scoring",
+};
+
+export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
+  open: "Open",
+  vc_held: "Vision call held",
+  proposal: "Proposal sent",
+  won: "Won",
+  lost: "Lost",
 };
 
 export function hardFailLabel(stream: Stream, id: string): string {

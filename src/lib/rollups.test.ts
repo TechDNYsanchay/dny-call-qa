@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CALLS, PEOPLE } from "@/lib/data/sample-data";
-import { daysOf, monthPeriod, rollup, weekPeriod, weekStart } from "./rollups";
+import type { CallRecord } from "@/lib/data/types";
+import { daysOf, funnel, monthPeriod, rollup, weekPeriod, weekStart } from "./rollups";
 
 describe("periods", () => {
   it("finds the Monday of a week", () => {
@@ -46,5 +47,32 @@ describe("roll-up", () => {
   it("compares with the previous period", () => {
     const again = rollup(week, PEOPLE, calls, calls);
     expect(again.change).toBe(0);
+  });
+});
+
+describe("funnel", () => {
+  const base = CALLS.find((c) => c.final && c.result?.stream === "first_call")!;
+  const call = (leadId: string | undefined, opts: { quality?: "hot" | "warm" | "cold"; vc?: string; status?: CallRecord["leadStatus"]; duration?: number; scored?: boolean } = {}): CallRecord => {
+    const result = base.result!.stream === "first_call" ? { ...base.result!, capture: { ...base.result!.capture, leadQuality: opts.quality ?? "cold", vcDateTime: opts.vc ?? null } } : base.result!;
+    return { ...base, leadId, leadStatus: opts.status, durationSec: opts.duration ?? 300, result: opts.scored === false ? undefined : result, final: opts.scored === false ? undefined : base.final };
+  };
+
+  it("counts calls, then each lead once at the furthest stage it reached", () => {
+    const f = funnel([
+      call(undefined, { duration: 0 }), // not connected, no lead
+      call("a", { quality: "cold" }),
+      call("b", { quality: "warm" }),
+      call("b", { quality: "hot", vc: "Thu 4 pm" }), // second call books the meeting
+      call("c", { quality: "cold", status: "won" }), // status set on the lead page wins
+      call("d", { status: "lost", scored: false }),
+    ]);
+    expect(f).toEqual({ calls: 6, connected: 5, leads: 4, qualified: 2, vcBooked: 2, vcHeld: 1, proposal: 1, won: 1, lost: 1 });
+  });
+
+  it("never gets wider further down", () => {
+    const f = funnel(CALLS);
+    const stages = [f.leads, f.qualified, f.vcBooked, f.vcHeld, f.proposal, f.won];
+    expect(stages).toEqual([...stages].sort((a, b) => b - a));
+    expect(f.connected).toBeLessThanOrEqual(f.calls);
   });
 });

@@ -5,7 +5,7 @@
 import type { CallRecord } from "@/lib/data/types";
 import { formatClock, formatDay, formatDuration, hardFailLabel } from "@/lib/format";
 import type { PersonDayReport, TeamSummary } from "@/lib/reports";
-import type { PersonRollup, Rollup } from "@/lib/rollups";
+import { FUNNEL_STAGES, pctOf, type Funnel, type PersonRollup, type Rollup } from "@/lib/rollups";
 import type { Band } from "@/lib/scoring/compute";
 
 export interface Email {
@@ -163,7 +163,7 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
       `<h2 style="${H2}">People</h2><table style="border-collapse:collapse;font-size:13px"><tr style="${MUTED};text-align:left"><th style="padding:0 8px 4px 0;font-weight:500">Person</th><th style="padding:0 8px 4px;font-weight:500">Scored</th><th style="padding:0 8px 4px;font-weight:500">Average</th><th style="padding:0 8px 4px;font-weight:500">Hard fails</th><th style="padding:0 0 4px 8px;font-weight:500">VCs booked</th></tr>${rows}</table>`,
     red && `<h2 style="${H2}">Red calls to review in stand-up</h2><ul style="padding-left:18px;margin:0">${red}</ul>`,
     topMissed.length &&
-      `<h2 style="${H2}">Questions skipped most</h2><ul style="padding-left:18px;margin:0">${topMissed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} calls)</span></li>`).join("")}</ul>`,
+      `<h2 style="${H2}">Questions skipped most</h2><ul style="padding-left:18px;margin:0">${topMissed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} call${m.count === 1 ? "" : "s"})</span></li>`).join("")}</ul>`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -192,6 +192,17 @@ const changeText = (value: number | null, against: string) =>
 
 const periodName = (r: { period: { kind: "week" | "month" } }) => (r.period.kind === "week" ? "Weekly" : "Monthly");
 
+/** The funnel as a table: email clients can't be trusted with charts, so each bar is a sized cell. */
+function funnelHtml(f: Funnel): string {
+  const rows = FUNNEL_STAGES.map((s) => {
+    const n = f[s.key];
+    const pct = pctOf(n, f.leads);
+    const bar = n > 0 ? `<div style="background:#2a78d6;height:12px;width:${Math.max(2, Math.round(pct * 1.6))}px;border-radius:0 4px 4px 0"></div>` : "";
+    return `<tr><td style="padding:4px 12px 4px 0">${s.label}</td><td style="padding:4px 8px;width:160px">${bar}</td><td style="padding:4px 0 4px 8px;text-align:right">${n} <span style="${MUTED}">· ${pct}%</span></td></tr>`;
+  }).join("");
+  return `<h2 style="${H2}">Lead funnel</h2><p style="${P}">${f.calls} calls logged → ${f.connected} connected → ${f.leads} ${f.leads === 1 ? "lead" : "leads"} reached${f.lost ? ` · ${f.lost} marked lost` : ""}</p><table style="border-collapse:collapse;font-size:13px">${rows}</table>`;
+}
+
 export function teamRollupEmail(r: Rollup, siteUrl: string): Email {
   const link = `${siteUrl}/rollups?${r.period.query}`;
   const shortLabel = r.period.label.replace(/^Week of /, "");
@@ -209,10 +220,11 @@ export function teamRollupEmail(r: Rollup, siteUrl: string): Email {
     `<p style="${P}">Team average ${bandHtml(r.average, r.band)}${changeHtml(r.change, r.period.previous.label)} · ${r.scored} of ${r.calls} calls scored · ${r.hardFailCalls} with a hard fail · VCs booked: ${r.vcsBooked} from ${r.firstCallsScored} scored first calls</p>`,
     rows &&
       `<h2 style="${H2}">Leaderboard</h2><table style="border-collapse:collapse;font-size:13px"><tr style="${MUTED};text-align:left"><th style="padding:0 8px 4px 0;font-weight:500">Person</th><th style="padding:0 8px 4px;font-weight:500">Scored</th><th style="padding:0 8px 4px;font-weight:500">Average</th><th style="padding:0 8px 4px;font-weight:500">Hard fails</th><th style="padding:0 0 4px 8px;font-weight:500">VCs booked</th></tr>${rows}</table>`,
+    r.funnel.leads > 0 && funnelHtml(r.funnel),
     r.hardFails.length &&
       `<h2 style="${H2}">Hard fails by type</h2><ul style="padding-left:18px;margin:0">${r.hardFails.map((h) => `<li>${esc(h.label)} <span style="${MUTED}">×${h.count}</span></li>`).join("")}</ul>`,
     r.missed.length &&
-      `<h2 style="${H2}">Mandatory questions skipped most</h2><ul style="padding-left:18px;margin:0">${r.missed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} calls)</span></li>`).join("")}</ul>`,
+      `<h2 style="${H2}">Mandatory questions skipped most</h2><ul style="padding-left:18px;margin:0">${r.missed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} call${m.count === 1 ? "" : "s"})</span></li>`).join("")}</ul>`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -220,6 +232,7 @@ export function teamRollupEmail(r: Rollup, siteUrl: string): Email {
     `${periodName(r)} call QA: ${r.period.label}`,
     `Team average ${bandText(r.average, r.band)}${changeText(r.change, r.period.previous.label)} · ${r.scored} scored · ${r.hardFailCalls} with a hard fail`,
     ...r.people.map((p, i) => `${i + 1}. ${p.person.name}: ${bandText(p.average, p.band)}${changeText(p.change, r.period.previous.label)}, ${p.scored}/${p.calls} scored`),
+    `Funnel: ${r.funnel.calls} calls, ${r.funnel.connected} connected, ${r.funnel.leads} leads reached, ${FUNNEL_STAGES.map((s) => `${r.funnel[s.key]} ${s.label.toLowerCase()}`).join(", ")}${r.funnel.lost ? `, ${r.funnel.lost} lost` : ""}`,
     `Roll-up: ${link}`,
   ].join("\n");
   return { subject, html: layout(`${periodName(r)} roll-up · ${r.period.label}`, body, { href: link, label: "Open the roll-up" }), text };
@@ -240,15 +253,26 @@ export function personRollupEmail(p: PersonRollup, r: Rollup, siteUrl: string): 
     (p.best || p.worst) &&
       `<h2 style="${H2}">Listen back</h2><ul style="padding-left:18px;margin:0">${p.best ? callLink("Best call", p.best) : ""}${p.worst ? callLink("Weakest call", p.worst) : ""}</ul>`,
     p.missed.length &&
-      `<h2 style="${H2}">Questions you skipped most</h2><ul style="padding-left:18px;margin:0">${p.missed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} calls)</span></li>`).join("")}</ul>`,
+      `<h2 style="${H2}">Questions you skipped most</h2><ul style="padding-left:18px;margin:0">${p.missed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} call${m.count === 1 ? "" : "s"})</span></li>`).join("")}</ul>`,
   ]
     .filter(Boolean)
     .join("\n");
   const text = [
     `${p.person.name}: ${r.period.label}`,
     `Average ${bandText(p.average, p.band)}${changeText(p.change, r.period.previous.label)} · ${p.scored}/${p.calls} scored · ${p.hardFailCalls} with a hard fail`,
-    ...p.missed.map((m) => `Skipped: ${m.question} (${m.count} calls)`),
+    ...p.missed.map((m) => `Skipped: ${m.question} (${m.count} call${m.count === 1 ? "" : "s"})`),
     `Roll-up: ${link}`,
   ].join("\n");
   return { subject, html: layout(`${p.person.name} · ${r.period.label}`, body, { href: link, label: "Open the roll-up" }), text };
+}
+
+export function disputeEmail(d: { who: string; client: string; when: string; score: number; band: Band; comment: string; link: string }): Email {
+  const subject = `${d.who} disputes a score: ${d.client}, ${d.when} (${bandText(d.score, d.band)})`;
+  const body = [
+    `<p style="${P}">${esc(d.who)} thinks the score on their call with ${esc(d.client)} (${esc(d.when)}) is wrong. The AI gave ${bandHtml(d.score, d.band)}.</p>`,
+    `<p style="${P};border-left:3px solid #e5e4df;padding-left:12px">“${esc(d.comment)}”</p>`,
+    `<p style="${P}">Agree with the score or correct it on the call page; either answers the dispute.</p>`,
+  ].join("\n");
+  const text = [`${d.who} disputes the score on their call with ${d.client} (${d.when}): ${bandText(d.score, d.band)}`, `“${d.comment}”`, `Review it: ${d.link}`].join("\n");
+  return { subject, html: layout(`Score disputed by ${d.who}`, body, { href: d.link, label: "Review the call" }), text };
 }

@@ -56,6 +56,7 @@ async function SignedInNav() {
         { href: "/leads", label: "Leads" },
         { href: "/rollups", label: "Roll-ups" },
         { href: "/sheets", label: "Call sheets" },
+        { href: "/team-members", label: "Team members" },
         { href: "/scorecards", label: "Scorecards" },
       ]
     : [
@@ -68,14 +69,22 @@ async function SignedInNav() {
 
   return (
     <>
-      <nav className="flex gap-4 text-sm">
+      <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {links.map((item) => (
           <Link key={item.href} href={item.href} className="text-muted hover:text-foreground">
             {item.label}
           </Link>
         ))}
       </nav>
-      <div className="ml-auto flex items-center gap-3 text-xs">
+      <div className="ml-auto flex flex-wrap items-center gap-3 text-xs">
+        <form action="/search" role="search">
+          <input
+            name="q"
+            placeholder="Search leads and calls"
+            aria-label="Search leads and calls"
+            className="w-44 rounded-md border border-border bg-surface px-2.5 py-1 text-xs"
+          />
+        </form>
         {day && (
           <span className={`rounded-full px-2.5 py-0.5 font-medium ${sample ? "bg-warning/15" : "bg-background"}`}>
             {sample ? "Sample data · " : "Latest calls: "}

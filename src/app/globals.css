@@ -14,6 +14,12 @@
   --status-warning: #fab219;
   --status-critical: #d03b3b;
   --chart-muted: #b6b5ae;
+  /* The lead funnel: one blue, darker at each later stage (validated as an ordinal ramp). */
+  --funnel-1: #86b6ef;
+  --funnel-2: #5598e7;
+  --funnel-3: #2a78d6;
+  --funnel-4: #1c5cab;
+  --funnel-5: #104281;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +31,12 @@
     --border: #36352f;
     --brand: #e0574a;
     --chart-muted: #64635c;
+    /* Lighter at each later stage on the dark surface. */
+    --funnel-1: #1c5cab;
+    --funnel-2: #2a78d6;
+    --funnel-3: #5598e7;
+    --funnel-4: #86b6ef;
+    --funnel-5: #b7d3f6;
   }
 }
 

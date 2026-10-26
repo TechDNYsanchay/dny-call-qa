@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { FunnelChart } from "@/components/funnel";
 import { BandBadge, Card, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
 import { getActiveSheets, getReportDay, listCallsBetween, listPeople, requireMe } from "@/lib/data";
 import { formatClock, formatDay } from "@/lib/format";
@@ -157,6 +158,10 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
         </div>
       </Card>
 
+      <Card title={me.canSeeAll ? "Lead funnel" : "My lead funnel"} className="mb-6">
+        <FunnelChart funnel={r.funnel} />
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Hard fails by type">
           {r.hardFails.length ? (
@@ -178,7 +183,7 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
               {r.missed.map((m) => (
                 <li key={m.id} className="flex justify-between gap-3">
                   <span>{m.question}</span>
-                  <span className="shrink-0 tabular-nums text-muted">{m.count} calls</span>
+                  <span className="shrink-0 tabular-nums text-muted">{m.count} call{m.count === 1 ? "" : "s"}</span>
                 </li>
               ))}
             </ul>

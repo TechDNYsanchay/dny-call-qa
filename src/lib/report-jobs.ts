@@ -6,11 +6,12 @@ import "server-only";
 import { pipelineReads } from "@/lib/data";
 import { personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
 import { alert } from "@/lib/alerts";
-import { recipientFor, sendEmail } from "@/lib/email/send";
+import { sendEmail } from "@/lib/email/send";
 import { istDayRange } from "@/lib/format";
 import { personDayReport, teamSummary } from "@/lib/reports";
 import { rollup, type Period } from "@/lib/rollups";
 import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
+import { reportsTestInbox } from "@/lib/settings";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 const SCORED_ROLES = ["executive", "consultant"];
@@ -83,6 +84,7 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
     pipelineReads.activeSheets(),
   ]);
   const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
+  const testInbox = await reportsTestInbox();
 
   // The nightly scoring should have finished by now; say so if calls are still waiting.
   if (!preview) {
@@ -102,7 +104,7 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   const wasSent = (kind: string, key: string, to: string) => alreadySent.some((s) => s.kind === kind && s.subject_key === key && s.recipient === to);
 
   async function deliver(kind: "person" | "team", key: string, who: string, intended: string | null, email: Email) {
-    const to = recipientFor(intended);
+    const to = testInbox || intended;
     if (!to) return void result.skipped.push({ kind, who, why: "no email address on the team list" });
     if (preview) return void result.preview!.push(email);
     if (wasSent(kind, key, to)) return void result.skipped.push({ kind, who, why: "already sent" });
@@ -120,11 +122,11 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
     await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site));
   }
 
-  // Founders, managers and admins get the team summary (one copy when REPORTS_TO is set).
+  // Founders, managers and admins get the team summary (one copy to the test inbox while testing).
   if (calls.length > 0) {
     const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site);
     const readers = people.filter((p) => READER_ROLES.includes(p.role));
-    const targets = process.env.REPORTS_TO ? [{ name: "test inbox", email: null }] : readers;
+    const targets = testInbox ? [{ name: "test inbox", email: null }] : readers;
     if (targets.length === 0) result.skipped.push({ kind: "team", who: "founders", why: "no founder, manager or admin on the team list" });
     for (const reader of targets) await deliver("team", "team", reader.name, reader.email, email);
   }
@@ -133,7 +135,7 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
 
 /**
  * Emails the weekly or monthly roll-up: the team version to founders, managers and admins, and
- * each person's own. Same once-only rule and REPORTS_TO test inbox as the daily emails.
+ * each person's own. Same once-only rule and test inbox as the daily emails.
  */
 export async function sendRollups(period: Period, { preview = false, limit = Infinity } = {}): Promise<SendResult> {
   const db = supabaseAdmin();
@@ -145,6 +147,7 @@ export async function sendRollups(period: Period, { preview = false, limit = Inf
   ]);
   const sheets = await pipelineReads.activeSheets();
   const result: SendResult = { day: period.from, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
+  const testInbox = await reportsTestInbox();
   if (calls.length === 0) return result;
   const r = rollup(period, people, calls, previousCalls, sheets.questions);
 
@@ -152,7 +155,7 @@ export async function sendRollups(period: Period, { preview = false, limit = Inf
   if (error) throw new Error(`report sends: ${error.message}`);
 
   async function deliver(kind: "person" | "team", key: string, who: string, intended: string | null, email: Email) {
-    const to = recipientFor(intended);
+    const to = testInbox || intended;
     if (!to) return void result.skipped.push({ kind, who, why: "no email address on the team list" });
     if (preview) return void result.preview!.push(email);
     // Keys carry the period kind, so a Monday's weekly email never clashes with that day's daily one.
@@ -172,7 +175,7 @@ export async function sendRollups(period: Period, { preview = false, limit = Inf
     await deliver("person", p.person.id, p.person.name, person?.email ?? null, personRollupEmail(p, r, site));
   }
   const email = teamRollupEmail(r, site);
-  const targets = process.env.REPORTS_TO ? [{ name: "test inbox", email: null }] : people.filter((p) => READER_ROLES.includes(p.role));
+  const targets = testInbox ? [{ name: "test inbox", email: null }] : people.filter((p) => READER_ROLES.includes(p.role));
   for (const reader of targets) await deliver("team", "team", reader.name, reader.email, email);
   return result;
 }

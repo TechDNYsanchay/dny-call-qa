@@ -1,6 +1,5 @@
 // Sends the report emails through Gmail (Google Workspace) from SMTP_USER, with a Google app
-// password in SMTP_PASSWORD. REPORTS_TO, when set, receives every email instead of the real
-// recipients, for testing.
+// password in SMTP_PASSWORD. While testing, every report goes to one inbox (Team members page).
 
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
@@ -23,10 +22,6 @@ function mailer(): Transporter {
   return transport;
 }
 
-/** Who actually receives a message meant for `intended`: REPORTS_TO while testing. */
-export function recipientFor(intended: string | null): string | null {
-  return process.env.REPORTS_TO || intended;
-}
 
 export async function sendEmail(to: string, email: Email): Promise<void> {
   await mailer().sendMail({

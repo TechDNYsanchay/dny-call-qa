@@ -32,6 +32,18 @@ export interface ScoreReview {
   ai: { score: number; band: FinalScore["band"]; levels: FinalScore["levels"]; hardFails: string[] } | null;
 }
 
+export interface ScoreDispute {
+  comment: string;
+  by: string | null;
+  /** IST timestamps. */
+  at: string;
+  resolvedAt: string | null;
+}
+
+/** Where a lead stands after the calls; founders set it on the lead page. */
+export const LEAD_STATUSES = ["open", "vc_held", "proposal", "won", "lost"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
 export type InProgress = "recording" | "transcription" | "transcription_failed" | "scoring";
 
 export interface CallRecord {
@@ -55,6 +67,11 @@ export interface CallRecord {
   sheetVersionId?: string | null;
   /** A founder's, manager's or admin's review of the AI's score (the brief's calibration). */
   review?: ScoreReview;
+  /** The executive's challenge to the score; a founder's review resolves it. */
+  dispute?: ScoreDispute;
+  leadId?: string;
+  /** Where the lead stands now (set on the lead page). */
+  leadStatus?: LeadStatus;
   notScored?: NotScoredReason;
   /** Arrived and on its way to a score. */
   inProgress?: InProgress;

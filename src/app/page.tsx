@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
 import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listCalls, listPeople, previousDayAverages, requireMe } from "@/lib/data";
+import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listCalls, listOpenDisputes, listPeople, previousDayAverages, requireMe } from "@/lib/data";
 import { formatClock, formatDay, hardFailLabel, parseDayParam } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
@@ -23,12 +23,13 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const [latest, first] = await Promise.all([getReportDay(), getFirstDay()]);
   const day = requested ?? latest;
   if (!day) return <EmptyState title="Team summary" />;
-  const [people, calls, previous, around, sheets] = await Promise.all([
+  const [people, calls, previous, around, sheets, disputes] = await Promise.all([
     listPeople(),
     listCalls(day),
     previousDayAverages(day),
     getAdjacentDays(day),
     getActiveSheets(),
+    listOpenDisputes(),
   ]);
   const team = teamSummary(people, calls, previous, sheets.questions);
   const scored = calls.filter((c) => c.final);
@@ -55,6 +56,24 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
           note={`in ${team.visionCalls} vision call${team.visionCalls === 1 ? "" : "s"}`}
         />
       </div>
+
+      {disputes.length > 0 && (
+        <Card title={`Disputed scores to review (${disputes.length})`} className="mb-6 border-brand/50">
+          <ul className="divide-y divide-border">
+            {disputes.map((call) => (
+              <li key={call.id} className="flex flex-wrap items-start justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                <div className="min-w-0">
+                  <Link href={`/calls/${call.id}`} className="font-medium hover:underline">
+                    {nameOf(call.personId)} · {call.client.name} · {formatDay(call.startedAt).replace(/ \d{4}$/, "")} {formatClock(call.startedAt)}
+                  </Link>
+                  <p className="text-sm text-muted">“{call.dispute!.comment}”</p>
+                </div>
+                <BandBadge score={call.final!.score} band={call.final!.band} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card title="People" className="mb-6">
         <div className="-mx-4 overflow-x-auto sm:-mx-5">

@@ -90,7 +90,11 @@ async function Calls({ searchParams }: Pick<PageProps<"/calls">, "searchParams">
                   <td className="px-2 py-3 text-right tabular-nums">{formatDuration(call.durationSec)}</td>
                   <td className="px-4 py-3 sm:px-5">
                     {call.final ? (
-                      <BandBadge score={call.final.score} band={call.final.band} />
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <BandBadge score={call.final.score} band={call.final.band} />
+                        {call.dispute && !call.dispute.resolvedAt && <Chip>⚑ Disputed</Chip>}
+                        {call.review && <span className="text-xs text-muted">{call.review.verdict === "agree" ? "✓ Reviewed" : "Corrected"}</span>}
+                      </span>
                     ) : (
                       <Chip>
                         {call.notScored ? NOT_SCORED_LABEL[call.notScored] : call.inProgress ? IN_PROGRESS_LABEL[call.inProgress] : "Not scored"}
