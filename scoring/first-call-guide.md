@@ -68,8 +68,12 @@ the sheet captures is missing, e.g. name but no email, or size but not whether i
   - Mark fc06 `not_applicable` for a startup.
   - Covered or partly needs a quote; missed or not_applicable has `[]`.
 - **Capture fields:** only what was said, otherwise `null`.
-  - **Names:** write names as transcribed, adding "(as transcribed)" if you're unsure.
-  - **`city`:** where the project is.
+  - **Keep these short:** they're shown on the Leads page. No transcription notes ("as transcribed",
+    alternative spellings, what the transcript said); mention those in a reason if they matter.
+  - **`clientName`:** just the name, in Roman script, e.g. "Mohit" or "Nilesh Para (?), Granway Hospitality".
+    Add "(?)" when you're unsure of the spelling.
+  - **`city`:** where the project is, with the area in brackets if said, e.g. "Pune (Baner)". Add
+    "(?)" when unsure.
   - **`budgetBand`:** the client's project budget, never DNY's fee.
   - **`leadQuality`:**
     - hot: a concrete plan and a meeting fixed
