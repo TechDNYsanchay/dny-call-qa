@@ -6,7 +6,8 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { formatPhone, istDayRange, toIst } from "@/lib/format";
 import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
-import { CallResultSchema } from "@/lib/scoring/schema";
+import { CallResultSchema, FirstCallCaptureSchema } from "@/lib/scoring/schema";
+import type { FirstCallCapture } from "@/lib/scoring/schema";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
 import type { CallRecord, Person, PersonRole } from "./types";
 
@@ -26,7 +27,8 @@ const CALL_FIELDS = `
   id, stream, person_id, agent_phone, client_phone, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
   leads ( name, city ),
   call_metrics ( * ),
-  call_scores ( score, band, levels, hard_fails, overrides, result )
+  call_scores ( score, band, levels, hard_fails, overrides, result,
+    review_verdict, reviewed_at, override_reason, ai_score, ai_band, ai_levels, ai_hard_fails, reviewer:people ( full_name ) )
 `;
 
 function fail(what: string, error: { message: string }): never {
@@ -123,7 +125,22 @@ type CallRow = {
     credentials_sec: number;
     service_share_of_agent: number;
   } | null;
-  call_scores: { score: number; band: Band; levels: unknown; hard_fails: string[]; overrides: string[]; result: unknown } | null;
+  call_scores: {
+    score: number;
+    band: Band;
+    levels: unknown;
+    hard_fails: string[];
+    overrides: string[];
+    result: unknown;
+    review_verdict: "agree" | "corrected" | null;
+    reviewed_at: string | null;
+    override_reason: string | null;
+    ai_score: number | null;
+    ai_band: Band | null;
+    ai_levels: unknown;
+    ai_hard_fails: string[] | null;
+    reviewer: { full_name: string } | null;
+  } | null;
   transcript_segments?: { speaker_label: string; role: string; start_sec: number; end_sec: number; text: string; topic: string | null }[];
 };
 
@@ -175,6 +192,24 @@ function toCallRecord(row: CallRow): CallRecord {
           overrides: row.call_scores!.overrides,
         }
       : undefined,
+    review:
+      scored && row.call_scores!.review_verdict && row.call_scores!.reviewed_at
+        ? {
+            verdict: row.call_scores!.review_verdict,
+            reviewer: row.call_scores!.reviewer?.full_name ?? null,
+            at: toIst(row.call_scores!.reviewed_at),
+            note: row.call_scores!.override_reason,
+            ai:
+              row.call_scores!.ai_score !== null && row.call_scores!.ai_band
+                ? {
+                    score: Number(row.call_scores!.ai_score),
+                    band: row.call_scores!.ai_band,
+                    levels: (row.call_scores!.ai_levels ?? {}) as Record<string, Level>,
+                    hardFails: row.call_scores!.ai_hard_fails ?? [],
+                  }
+                : null,
+          }
+        : undefined,
     notScored: row.scoring_status === "not_eligible" ? ((row.not_scored_reason ?? undefined) as NotScoredReason | undefined) : undefined,
     inProgress:
       row.scoring_status === "waiting" || row.scoring_status === "ready"
@@ -290,3 +325,75 @@ export const pipelineReads = {
   calls: (day: string) => readCalls(supabaseAdmin(), day),
   previousDayAverages: (day: string) => readPreviousDayAverages(supabaseAdmin(), day),
 };
+
+export interface Calibration {
+  reviewed: number;
+  agreed: number;
+  /** Average points the founders' corrections moved the score (negative = AI was generous). */
+  averageChange: number | null;
+  /** Scorecard areas founders changed most, with how often. */
+  areasCorrected: { id: string; count: number }[];
+}
+
+/** How often founders agree with the AI's scores: the brief's calibration measure. */
+export const getCalibration = cache(async (): Promise<Calibration> => {
+  const { data, error } = await (await supabaseUser())
+    .from("call_scores")
+    .select("review_verdict, score, ai_score, levels, ai_levels")
+    .not("review_verdict", "is", null);
+  if (error) fail("calibration", error);
+  const corrected = data.filter((r) => r.review_verdict === "corrected");
+  const changes = corrected.map((r) => Number(r.score) - Number(r.ai_score ?? r.score));
+  const counts = new Map<string, number>();
+  for (const r of corrected) {
+    const ai = (r.ai_levels ?? {}) as Record<string, number>;
+    const now = (r.levels ?? {}) as Record<string, number>;
+    for (const id of Object.keys(now)) if (ai[id] !== undefined && ai[id] !== now[id]) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return {
+    reviewed: data.length,
+    agreed: data.filter((r) => r.review_verdict === "agree").length,
+    averageChange: changes.length ? Math.round((changes.reduce((s, x) => s + x, 0) / changes.length) * 10) / 10 : null,
+    areasCorrected: [...counts].map(([id, count]) => ({ id, count })).sort((a, b) => b.count - a.count),
+  };
+});
+
+export interface LeadRow {
+  id: string;
+  phone: string | null;
+  email: string | null;
+  /** What the latest scored first call captured (record_lead_capture). */
+  capture: FirstCallCapture;
+  lastCall: { id: string; startedAt: string; personId: string | null; score: number | null; band: Band | null } | null;
+  callCount: number;
+}
+
+/** Leads a scored call has captured details for, most recent call first. Row-level security limits executives to their own. */
+export const listLeads = cache(async (): Promise<LeadRow[]> => {
+  const { data, error } = await (await supabaseUser())
+    .from("leads")
+    .select("id, phone, email, first_call_capture, calls ( id, started_at, person_id, call_scores ( score, band ) )")
+    .not("first_call_capture", "is", null);
+  if (error) fail("leads", error);
+  type Row = { id: string; phone: string | null; email: string | null; first_call_capture: unknown;
+    calls: { id: string; started_at: string; person_id: string | null; call_scores: { score: number; band: Band } | null }[] };
+  const rows: LeadRow[] = [];
+  for (const lead of data as unknown as Row[]) {
+    const capture = FirstCallCaptureSchema.safeParse(lead.first_call_capture);
+    if (!capture.success) continue;
+    // The latest scored call (where the details came from), else the latest call.
+    const newestFirst = [...lead.calls].sort((a, b) => b.started_at.localeCompare(a.started_at));
+    const last = newestFirst.find((c) => c.call_scores) ?? newestFirst[0];
+    rows.push({
+      id: lead.id,
+      phone: lead.phone,
+      email: lead.email,
+      capture: capture.data,
+      callCount: lead.calls.length,
+      lastCall: last
+        ? { id: last.id, startedAt: toIst(last.started_at), personId: last.person_id, score: last.call_scores ? Number(last.call_scores.score) : null, band: last.call_scores?.band ?? null }
+        : null,
+    });
+  }
+  return rows.sort((a, b) => (b.lastCall?.startedAt ?? "").localeCompare(a.lastCall?.startedAt ?? ""));
+});

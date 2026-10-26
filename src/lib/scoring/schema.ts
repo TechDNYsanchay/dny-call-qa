@@ -161,6 +161,7 @@ export const VisionCallResultSchema = z.object({
 export const CallResultSchema = z.discriminatedUnion("stream", [FirstCallResultSchema, VisionCallResultSchema]);
 
 export type Evidence = z.infer<typeof EvidenceSchema>;
+export type FirstCallCapture = z.infer<typeof FirstCallCaptureSchema>;
 export type FirstCallResult = z.infer<typeof FirstCallResultSchema>;
 export type VisionCallResult = z.infer<typeof VisionCallResultSchema>;
 export type CallResult = z.infer<typeof CallResultSchema>;

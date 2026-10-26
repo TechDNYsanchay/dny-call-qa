@@ -22,6 +22,16 @@ export interface TranscriptLine {
   topic?: Topic;
 }
 
+export interface ScoreReview {
+  verdict: "agree" | "corrected";
+  reviewer: string | null;
+  /** IST timestamp. */
+  at: string;
+  note: string | null;
+  /** What the AI gave, before any correction. */
+  ai: { score: number; band: FinalScore["band"]; levels: FinalScore["levels"]; hardFails: string[] } | null;
+}
+
 export type InProgress = "recording" | "transcription" | "transcription_failed" | "scoring";
 
 export interface CallRecord {
@@ -41,6 +51,8 @@ export interface CallRecord {
   metrics?: CallMetrics;
   result?: CallResult;
   final?: FinalScore;
+  /** A founder's, manager's or admin's review of the AI's score (the brief's calibration). */
+  review?: ScoreReview;
   notScored?: NotScoredReason;
   /** Arrived and on its way to a score. */
   inProgress?: InProgress;

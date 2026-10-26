@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { RecordingPlayer, Transcript } from "@/components/call-recording";
+import { ScoreReview } from "@/components/score-review";
 import { BandBadge, Card, Chip, Loading, PageHeader, Quote } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
 import { getCall, getPerson, requireMe, type CallRecord } from "@/lib/data";
@@ -17,7 +18,7 @@ import {
 } from "@/lib/format";
 import { questionsFor } from "@/lib/scoring/call-sheets";
 import type { FirstCallResult } from "@/lib/scoring/schema";
-import { areasFor } from "@/lib/scoring/scorecards";
+import { areasFor, hardFailsFor } from "@/lib/scoring/scorecards";
 
 type AreaResult = FirstCallResult["areas"]["opening"];
 
@@ -31,7 +32,7 @@ export default function CallPage({ params }: PageProps<"/calls/[id]">) {
 
 async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) {
   const { id } = await params;
-  await requireMe();
+  const me = await requireMe();
   // Row-level security returns nothing for someone else's call, so it reads as not found.
   const call = await getCall(id);
   if (!call) notFound();
@@ -69,7 +70,21 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
         }
       />
 
+      {call.review && <ReviewBanner call={call} />}
       {call.final && call.result ? <ScoredCall call={call} /> : null}
+      {call.final && me.canSeeAll && (
+        <div className="mt-6">
+          <ScoreReview
+            callId={call.id}
+            reviewed={Boolean(call.review)}
+            aiScore={call.review?.verdict === "corrected" ? call.review.ai?.score : undefined}
+            areas={areasFor(call.stream).map((a) => ({ id: a.id, name: a.name, weight: a.weight, level: call.final!.levels[a.id] }))}
+            hardFails={hardFailsFor(call.stream)
+              .filter((h) => !h.measured)
+              .map((h) => ({ id: h.id, label: h.label, on: call.final!.hardFails.includes(h.id) }))}
+          />
+        </div>
+      )}
       {call.transcript.length > 0 && <Transcript lines={call.transcript} />}
     </>
   );
@@ -136,6 +151,9 @@ function ScoredCall({ call }: { call: CallRecord }) {
                       <div className="text-xs text-muted">
                         {level === 10 ? "Met" : level === 5 ? "Partial" : "Missed"} · weight {area.weight}
                       </div>
+                      {call.review?.verdict === "corrected" && call.review.ai && call.review.ai.levels[area.id] !== level && (
+                        <div className="text-xs text-muted">Corrected · AI gave {call.review.ai.levels[area.id]}</div>
+                      )}
                     </td>
                     <td className="px-2 py-3 text-right tabular-nums">
                       {(area.weight * level) / 10}
@@ -255,5 +273,34 @@ function Measure({ label, value }: { label: string; value: string }) {
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
+  );
+}
+
+/** Who reviewed the AI's score, and what changed. */
+function ReviewBanner({ call }: { call: CallRecord }) {
+  const review = call.review!;
+  const who = review.reviewer ?? "A founder";
+  const when = `${formatDay(review.at)}, ${formatClock(review.at)}`;
+  return (
+    <Card className="mb-6">
+      {review.verdict === "agree" ? (
+        <p className="text-sm">
+          <span className="font-medium">✓ Reviewed:</span> {who} agreed with this score <span className="text-muted">· {when}</span>
+        </p>
+      ) : (
+        <p className="text-sm">
+          <span className="font-medium">Corrected by {who}:</span>{" "}
+          {review.ai ? (
+            <>
+              the AI scored <BandBadge score={review.ai.score} band={review.ai.band} />, now <BandBadge score={call.final!.score} band={call.final!.band} />
+            </>
+          ) : (
+            "the score was changed"
+          )}{" "}
+          <span className="text-muted">· {when}</span>
+        </p>
+      )}
+      {review.note && <p className="mt-1 text-sm text-muted">“{review.note}”</p>}
+    </Card>
   );
 }

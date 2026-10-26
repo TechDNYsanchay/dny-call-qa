@@ -39,6 +39,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_log: {
+        Row: {
+          key: string
+          last_sent_at: string
+          times: number
+        }
+        Insert: {
+          key: string
+          last_sent_at?: string
+          times?: number
+        }
+        Update: {
+          key?: string
+          last_sent_at?: string
+          times?: number
+        }
+        Relationships: []
+      }
       call_metrics: {
         Row: {
           agent_share_first_half: number
@@ -91,6 +109,10 @@ export type Database = {
       }
       call_scores: {
         Row: {
+          ai_band: Database["public"]["Enums"]["score_band"] | null
+          ai_hard_fails: string[] | null
+          ai_levels: Json | null
+          ai_score: number | null
           band: Database["public"]["Enums"]["score_band"]
           call_id: string
           hard_fails: string[]
@@ -100,11 +122,17 @@ export type Database = {
           overrides: string[]
           reference_version_ids: string[]
           result: Json
+          review_verdict: string | null
+          reviewed_at: string | null
           rubric_version: string
           score: number
           scored_at: string
         }
         Insert: {
+          ai_band?: Database["public"]["Enums"]["score_band"] | null
+          ai_hard_fails?: string[] | null
+          ai_levels?: Json | null
+          ai_score?: number | null
           band: Database["public"]["Enums"]["score_band"]
           call_id: string
           hard_fails?: string[]
@@ -114,11 +142,17 @@ export type Database = {
           overrides?: string[]
           reference_version_ids?: string[]
           result: Json
+          review_verdict?: string | null
+          reviewed_at?: string | null
           rubric_version: string
           score: number
           scored_at?: string
         }
         Update: {
+          ai_band?: Database["public"]["Enums"]["score_band"] | null
+          ai_hard_fails?: string[] | null
+          ai_levels?: Json | null
+          ai_score?: number | null
           band?: Database["public"]["Enums"]["score_band"]
           call_id?: string
           hard_fails?: string[]
@@ -128,6 +162,8 @@ export type Database = {
           overrides?: string[]
           reference_version_ids?: string[]
           result?: Json
+          review_verdict?: string | null
+          reviewed_at?: string | null
           rubric_version?: string
           score?: number
           scored_at?: string

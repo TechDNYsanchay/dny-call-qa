@@ -8,15 +8,15 @@ export type CaptureRow = [label: string, value: string];
 const inr = (n: number) => (n >= 1e7 ? `₹${(n / 1e7).toFixed(2)} Cr` : n >= 1e5 ? `₹${(n / 1e5).toFixed(1)} L` : `₹${n.toLocaleString("en-IN")}`);
 const words = (s: string) => s.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
-const CLIENT_TYPE: Record<string, string> = {
+export const CLIENT_TYPE: Record<string, string> = {
   startup: "Startup",
   running_business: "Running business",
   investor: "Investor",
   chain: "Chain",
   international: "International",
 };
-const BUDGET: Record<string, string> = { under_50l: "Under ₹50 L", "50l_to_1cr": "₹50 L to ₹1 Cr", above_1cr: "Above ₹1 Cr" };
-const FORMAT: Record<string, string> = {
+export const BUDGET: Record<string, string> = { under_50l: "Under ₹50 L", "50l_to_1cr": "₹50 L to ₹1 Cr", above_1cr: "Above ₹1 Cr" };
+export const FORMAT: Record<string, string> = {
   qsr: "QSR",
   cafe: "Cafe",
   restaurant: "Restaurant",
@@ -25,7 +25,7 @@ const FORMAT: Record<string, string> = {
   multi_outlet: "Multi-outlet",
   other: "Other",
 };
-const ROUTE: Record<string, string> = {
+export const ROUTE: Record<string, string> = {
   sales_consultant: "Sales consultant",
   south_indian_cafe: "South Indian / cafe lead",
   bar: "Bar lead",

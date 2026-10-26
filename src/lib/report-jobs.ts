@@ -5,6 +5,7 @@
 import "server-only";
 import { pipelineReads } from "@/lib/data";
 import { personReportEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { alert } from "@/lib/alerts";
 import { recipientFor, sendEmail } from "@/lib/email/send";
 import { istDayRange } from "@/lib/format";
 import { personDayReport, teamSummary } from "@/lib/reports";
@@ -76,6 +77,19 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
   const [people, calls, previous] = await Promise.all([pipelineReads.people(), pipelineReads.calls(day), pipelineReads.previousDayAverages(day)]);
   const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
+
+  // The nightly scoring should have finished by now; say so if calls are still waiting.
+  if (!preview) {
+    const waiting = calls.filter((c) => c.inProgress === "scoring").length;
+    const failed = calls.filter((c) => c.inProgress === "transcription_failed").length;
+    if (waiting || failed) {
+      await alert(`scoring:${day}`, `${waiting + failed} call(s) from ${day} weren't scored`, [
+        waiting ? `${waiting} transcribed call(s) from ${day} are still waiting for the nightly scoring. Check the routine at https://claude.ai/code/routines.` : "",
+        failed ? `${failed} call(s) from ${day} couldn't be transcribed.` : "",
+        "Today's reports went out without them; they'll be scored on the next run.",
+      ].filter(Boolean));
+    }
+  }
 
   const { data: alreadySent, error: sentError } = await db.from("report_sends").select("kind, subject_key, recipient").eq("report_date", day);
   if (sentError) throw new Error(`report sends: ${sentError.message}`);

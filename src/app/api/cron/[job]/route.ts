@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { alert } from "@/lib/alerts";
 import { MailNotConfigured } from "@/lib/email/send";
 import { addDays, toIst } from "@/lib/format";
 import { syncCallyzer } from "@/lib/ingest/callyzer-api";
@@ -24,6 +25,16 @@ const JOBS = {
 } as const;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** What a failed job means for DNY, for the alert email. */
+const WHAT_STOPS: Record<string, string> = {
+  "callyzer-sync": "New calls aren't arriving from Callyzer. If the error mentions the allowed dates, the free sandbox has ended and the Callyzer API add-on is needed.",
+  sweep: "The overnight Callyzer catch-up didn't run, so some of yesterday's calls may be missing.",
+  transcribe: "Recordings aren't being transcribed, so calls can't be scored. Check the Deepgram key and credit.",
+  "build-reports": "Yesterday's reports weren't prepared, so missing recordings aren't flagged.",
+  "send-reports": "The 8 am reports may not have gone out.",
+  "tldv-sync": "Vision calls from tl;dv aren't being collected.",
+};
 const MAX_RANGE_DAYS = 15;
 
 export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">) {
@@ -40,7 +51,14 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
     if (job === "transcribe") {
       // ?limit=N transcribes at most N calls, for trying the job by hand.
       const limit = Number(new URL(request.url).searchParams.get("limit"));
-      return Response.json({ job, ...(await transcribePending(TRANSCRIBE_BUDGET_MS, limit > 0 ? limit : Infinity)) });
+      const run = await transcribePending(TRANSCRIBE_BUDGET_MS, limit > 0 ? limit : Infinity);
+      if (run.failed > 0 || run.retrying >= 3) {
+        await alert("transcribe:failures", "calls couldn't be transcribed", [
+          `The last transcription run had ${run.failed} call(s) fail for good and ${run.retrying} waiting to retry.`,
+          "Failed calls can't be scored. Check the Deepgram key and credit; a call's error is shown in its transcript_error.",
+        ]);
+      }
+      return Response.json({ job, ...run });
     }
     if (job === "build-reports" || job === "send-reports") {
       // Yesterday's calls by default; ?day=YYYY-MM-DD for another day, ?preview=1 to see the emails unsent.
@@ -74,7 +92,13 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
       return Response.json({ job, done: false, note: error.message }, { status: 202 });
     }
     console.error(`cron ${job}:`, error);
-    return Response.json({ job, error: error instanceof Error ? error.message : "failed" }, { status: 502 });
+    const message = error instanceof Error ? error.message : String(error);
+    await alert(`job:${job}`, `the ${job} job failed`, [
+      `The scheduled job "${job}" failed at ${toIst(new Date().toISOString()).slice(11, 16)} IST.`,
+      WHAT_STOPS[job] ?? "",
+      `Error: ${message}`,
+    ].filter(Boolean));
+    return Response.json({ job, error: message }, { status: 502 });
   }
 
   return Response.json({ job, description: JOBS[job as keyof typeof JOBS], done: false, note: "Not built yet" }, { status: 202 });

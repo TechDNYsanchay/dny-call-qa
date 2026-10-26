@@ -53,11 +53,13 @@ async function SignedInNav() {
     ? [
         { href: "/", label: "Team" },
         { href: "/calls", label: "Calls" },
+        { href: "/leads", label: "Leads" },
         { href: "/scorecards", label: "Scorecards" },
       ]
     : [
         { href: `/people/${me.id}`, label: "My report" },
         { href: "/calls", label: "My calls" },
+        { href: "/leads", label: "My leads" },
         { href: "/scorecards", label: "Scorecards" },
       ];
 

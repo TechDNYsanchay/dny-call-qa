@@ -1,4 +1,6 @@
-import { Card, PageHeader } from "@/components/ui";
+import { Suspense } from "react";
+import { Card, PageHeader, StatTile } from "@/components/ui";
+import { getCalibration, requireMe } from "@/lib/data";
 import {
   FIRST_CALL_SHEET_VERSION,
   questionsFor,
@@ -22,6 +24,9 @@ export default function ScorecardsPage() {
         title="Scorecards"
         subtitle={`What every call is scored against · rubric ${RUBRIC_VERSION}. Each area scores 0, 5 or 10 × its weight; Green ${GREEN_FROM}+, Amber ${AMBER_FROM}–${GREEN_FROM - 1}, Red below ${AMBER_FROM} or any hard fail.`}
       />
+      <Suspense fallback={null}>
+        <CalibrationCard />
+      </Suspense>
       <div className="space-y-8">
         {STREAMS.map(({ stream, title, sheet }) => (
           <section key={stream} className="space-y-4">
@@ -77,5 +82,41 @@ export default function ScorecardsPage() {
         ))}
       </div>
     </>
+  );
+}
+
+/** Founders' reviews of the AI's scores: how often they agree, and what they change. */
+async function CalibrationCard() {
+  const me = await requireMe();
+  if (!me.canSeeAll) return null;
+  const c = await getCalibration();
+  const areaName = (id: string) => [...areasFor("first_call"), ...areasFor("vision_call")].find((a) => a.id === id)?.name ?? id;
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-lg font-semibold">Calibration: founders&apos; reviews</h2>
+      {c.reviewed === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">
+            No scores reviewed yet. Open any scored call and choose &ldquo;Agree with this score&rdquo; or &ldquo;Correct it&rdquo;; the agreement
+            rate shows here.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile label="Calls reviewed" value={c.reviewed} />
+          <StatTile label="Agreed with the AI" value={`${Math.round((c.agreed / c.reviewed) * 100)}%`} note={`${c.agreed} of ${c.reviewed}`} />
+          <StatTile
+            label="Average correction"
+            value={c.averageChange === null ? "–" : `${c.averageChange > 0 ? "+" : ""}${c.averageChange}`}
+            note="points, on corrected calls"
+          />
+          <StatTile
+            label="Corrected most"
+            value={c.areasCorrected[0] ? areaName(c.areasCorrected[0].id) : "–"}
+            note={c.areasCorrected.slice(0, 3).map((a) => `${areaName(a.id)} ×${a.count}`).join(" · ") || "no area changes yet"}
+          />
+        </div>
+      )}
+    </section>
   );
 }
