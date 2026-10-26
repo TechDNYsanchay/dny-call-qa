@@ -44,7 +44,7 @@ describe("the founders' summary email", () => {
   const email = teamSummaryEmail(teamSummary(PEOPLE, calls, PREVIOUS_DAYS), REPORT_DATE, SITE);
 
   it("summarises the team in the subject", () => {
-    expect(email.subject).toMatch(/^Team call QA, Tue 20 Oct: average [\d.]+ (Green|Amber|Red) · \d+ scored, \d+ hard fails$/);
+    expect(email.subject).toMatch(/^Team call QA, Tue 20 Oct: average [\d.]+ (Green|Amber|Red) · \d+ scored, \d+ hard fails?$/);
   });
 
   it("lists red calls for stand-up with the hard-fail reason", () => {

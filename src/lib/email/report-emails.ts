@@ -133,7 +133,7 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
   const hardFails = scored.filter((c) => c.final!.hardFails.length > 0).length;
   const subject =
     average !== null
-      ? `Team call QA, ${when}: average ${bandText(average, teamBand)} · ${scored.length} scored, ${hardFails} hard fails`
+      ? `Team call QA, ${when}: average ${bandText(average, teamBand)} · ${scored.length} scored, ${hardFails} hard fail${hardFails === 1 ? "" : "s"}`
       : `Team call QA, ${when}: nothing scored`;
 
   const rows = summary.rows
