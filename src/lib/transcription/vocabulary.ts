@@ -20,4 +20,17 @@ export const DNY_TERMS = [
   "menu",
   "vision call",
   "consultant",
+  // Heard on real calls and misheard without a hint ("paid Puja", "Hungary", "Gorigau").
+  "Petpooja",
+  "POS",
+  "food costing",
+  "SOP",
+  "Andheri",
+  "Goregaon",
+  "Malad",
+  "Thane",
+  "Bandra",
+  "Powai",
+  "Navi Mumbai",
+  "Pune",
 ] as const;

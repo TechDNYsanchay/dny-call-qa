@@ -13,7 +13,8 @@
     "db:types": "npx supabase gen types typescript --linked > src/lib/supabase/database.types.tmp && mv src/lib/supabase/database.types.tmp src/lib/supabase/database.types.ts",
     "people": "tsx --env-file=.env.local scripts/people.mts",
     "stt:compare": "tsx --env-file=.env.local scripts/stt-compare.mts",
-    "score": "tsx --env-file=.env.local scripts/score.mts"
+    "score": "tsx --env-file=.env.local scripts/score.mts",
+    "transcribe": "tsx --env-file=.env.local scripts/transcribe.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
