@@ -10,7 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import { formatTimestamp, toIst } from "../src/lib/format";
-import { expectedQuestions, FIRST_CALL_QUESTIONS, VISION_CALL_QUESTIONS } from "../src/lib/scoring/call-sheets";
+import { expectedQuestions, FIRST_CALL_QUESTIONS, VISION_CALL_QUESTIONS, type Stream } from "../src/lib/scoring/call-sheets";
 import { finaliseScore, type Level } from "../src/lib/scoring/compute";
 import { computeMetrics, silences } from "../src/lib/scoring/metrics";
 import { CallResultSchema } from "../src/lib/scoring/schema";
@@ -19,15 +19,26 @@ import { db, must } from "./lib.mjs";
 
 const [command, ...args] = process.argv.slice(2);
 
+interface CallInfo {
+  id: string;
+  stream: Stream;
+  started_at: string;
+  duration_sec: number;
+  call_direction: string | null;
+  lead_id: string | null;
+  transcript_status: string;
+  scoring_status: string;
+  people: { full_name: string; role: string } | null;
+}
+
 async function loadCall(callId: string) {
-  const call = must(
-    await db
-      .from("calls")
-      .select("id, stream, started_at, duration_sec, call_direction, lead_id, transcript_status, scoring_status, people ( full_name, role )")
-      .eq("id", callId)
-      .single(),
-    "call",
-  );
+  const { data: call, error } = await db
+    .from("calls")
+    .select("id, stream, started_at, duration_sec, call_direction, lead_id, transcript_status, scoring_status, people ( full_name, role )")
+    .eq("id", callId)
+    .maybeSingle<CallInfo>();
+  if (error) throw new Error(`call: ${error.message}`);
+  if (!call) throw new Error(`No call ${callId}`);
   const segments = must(
     await db.from("transcript_segments").select("idx, speaker_label, start_sec, end_sec, text").eq("call_id", callId).order("idx"),
     "transcript",
