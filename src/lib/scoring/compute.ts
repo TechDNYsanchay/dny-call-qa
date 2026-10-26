@@ -41,7 +41,8 @@ export function dayAverage(scores: number[]): number | null {
 }
 
 export type RecordingStatus = "pending" | "available" | "missing" | "declined" | "deleted";
-export type NotScoredReason = "under_2_min" | "recording_declined" | "recording_missing" | "recording_pending";
+/** "not_sales_call" is set at scoring time: a vendor, telecom, job applicant or personal call. */
+export type NotScoredReason = "under_2_min" | "recording_declined" | "recording_missing" | "recording_pending" | "not_sales_call";
 
 /** Calls that are logged but never scored (brief section 5). A missing recording is a flag, never a zero. */
 export function scoringEligibility(call: {

@@ -48,7 +48,7 @@ async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[i
         <StatTile label="Calls reviewed" value={report.scored.length} note={`${report.totalMinutes} min across ${report.calls.length} calls`} />
         <StatTile label="Hard fails" value={report.hardFailCalls} />
         <StatTile label="Recording missing" value={report.notRecorded} note="flagged, not scored" />
-        <StatTile label="Logged only" value={report.notScored} note="under 2 min or declined" />
+        <StatTile label="Logged only" value={report.notScored} note="under 2 min, declined or not sales" />
       </div>
 
       <div className="mb-6 grid gap-6 lg:grid-cols-2">

@@ -15,6 +15,12 @@ hard fails and result format live in code; this guide is how to judge them consi
 4. Make any percentage you mention in a reason match the dry run's "client talked N%".
 5. Only save for real (`save` without `--dry-run`) when asked to.
 
+## Not a sales call
+
+If the call isn't a sales conversation with a prospect (a vendor, a telecom or bank representative, a
+job applicant, a personal call, a wrong number, an existing client's service issue), don't score it:
+run `npm run score -- skip <callId>` and say what the call was in your report.
+
 ## Speakers
 
 - Decide which label is DNY and which is the client from what they say (who represents DNY, who

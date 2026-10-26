@@ -76,6 +76,7 @@ export const NOT_SCORED_LABEL: Record<NotScoredReason, string> = {
   recording_declined: "Client declined recording",
   recording_missing: "Recording missing",
   recording_pending: "Waiting for recording",
+  not_sales_call: "Not a sales call",
 };
 
 export const IN_PROGRESS_LABEL: Record<InProgress, string> = {

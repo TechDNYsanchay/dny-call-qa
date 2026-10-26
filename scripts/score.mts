@@ -3,6 +3,7 @@
 // (weights, bands, measured rules) so the numbers can't drift with the prompt.
 //
 //   npm run score -- next [--call <id>]          print the next call ready for scoring (or that call)
+//   npm run score -- skip <callId>                not a sales call (vendor, telecom, applicant, personal): never scored
 //   npm run score -- save <callId> <result.json> [--dry-run]
 //                                                 check the result, save score, metrics and lead fields
 //                                                 (--dry-run: check and print the score, save nothing)
@@ -94,6 +95,14 @@ if (command === "next") {
       2,
     ),
   );
+} else if (command === "skip") {
+  const [callId] = args;
+  if (!callId) throw new Error("Usage: npm run score -- skip <callId>");
+  const rows = must(
+    await db.from("calls").update({ scoring_status: "not_eligible", not_scored_reason: "not_sales_call" }).eq("id", callId).neq("scoring_status", "scored").select("id"),
+    "skip",
+  );
+  console.log(rows.length ? "Marked as not a sales call; it won't be scored." : `No unscored call ${callId}`);
 } else if (command === "save") {
   const [callId, file] = args.filter((a) => !a.startsWith("--"));
   const dryRun = args.includes("--dry-run");
@@ -192,6 +201,6 @@ if (command === "next") {
   }
   console.log(`Saved: ${summary}`);
 } else {
-  console.log("Usage: npm run score -- next [--call <id>] | save <callId> <result.json> [--dry-run]  (see scripts/score.mts)");
+  console.log("Usage: npm run score -- next [--call <id>] | skip <callId> | save <callId> <result.json> [--dry-run]  (see scripts/score.mts)");
   process.exitCode = 1;
 }
