@@ -130,7 +130,7 @@ async function Results({ searchParams }: Pick<PageProps<"/search">, "searchParam
                               title="Play the call from here"
                               className="group flex gap-3 rounded-md border border-transparent px-2 py-1.5 text-sm hover:border-border hover:bg-background"
                             >
-                              <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded bg-background px-1.5 font-mono text-[0.7rem] tabular-nums text-muted group-hover:text-foreground">
+                              <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded bg-background px-1.5 font-mono text-2xs tabular-nums text-muted group-hover:text-foreground">
                                 <PlayIcon />
                                 {formatTimestamp(l.startSec)}
                               </span>

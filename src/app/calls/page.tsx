@@ -82,7 +82,7 @@ async function Calls({ searchParams }: Pick<PageProps<"/calls">, "searchParams">
       <Card>
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="text-left text-xs text-muted">
+            <thead className="whitespace-nowrap text-left text-xs text-muted lg:whitespace-normal">
               <tr className="border-b border-border">
                 <th className="px-4 py-2 font-medium sm:px-5">Time</th>
                 {me.canSeeAll && <th className="px-2 py-2 font-medium">Person</th>}

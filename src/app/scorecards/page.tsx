@@ -63,7 +63,7 @@ export default function ScorecardsPage() {
               <span className="absolute inset-y-0 w-0.5 bg-surface" style={{ left: `${AMBER_FROM}%` }} />
               <span className="absolute inset-y-0 w-0.5 bg-surface" style={{ left: `${GREEN_FROM}%` }} />
             </span>
-            <span className="relative mt-1 block h-3 text-[0.65rem] tabular-nums text-muted">
+            <span className="relative mt-1 block h-4 text-2xs tabular-nums text-muted">
               <span className="absolute left-0">0</span>
               <span className="absolute -translate-x-1/2" style={{ left: `${AMBER_FROM}%` }}>
                 {AMBER_FROM}
@@ -130,7 +130,7 @@ export default function ScorecardsPage() {
                         <span className="mt-1.5 size-2 shrink-0 rounded-[2px] bg-critical" aria-hidden="true" />
                         {f.label}
                       </span>
-                      {f.measured && <span className="shrink-0 rounded-full border border-border px-2 py-px text-[0.68rem] text-muted">Measured</span>}
+                      {f.measured && <span className="shrink-0 rounded-full border border-border px-2 py-px text-2xs text-muted">Measured</span>}
                     </li>
                   ))}
                 </ul>
@@ -210,13 +210,13 @@ async function SheetQuestionsCard({ stream }: { stream: Stream }) {
       <ol className="space-y-1.5 text-sm">
         {sheet.questions.map((q) => (
           <li key={q.id} className="flex gap-2.5">
-            <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[0.65rem] font-semibold tabular-nums text-background">
+            <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-2xs font-semibold tabular-nums text-background">
               {q.number}
             </span>
             <span>
               {q.question}
-              {q.priority === "good_to_have" && <span className="ml-1.5 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-[0.65rem] text-muted">Good to have</span>}
-              {q.runningBusinessOnly && <span className="ml-1.5 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-[0.65rem] text-muted">RB only</span>}
+              {q.priority === "good_to_have" && <span className="ml-1.5 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-2xs text-muted">Good to have</span>}
+              {q.runningBusinessOnly && <span className="ml-1.5 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-2xs text-muted">RB only</span>}
             </span>
           </li>
         ))}

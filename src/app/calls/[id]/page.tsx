@@ -165,7 +165,7 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
       <Card title="Scorecard">
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
           <table className="w-full min-w-[640px] text-sm">
-            <thead className="text-left text-xs text-muted">
+            <thead className="whitespace-nowrap text-left text-xs text-muted lg:whitespace-normal">
               <tr className="border-b border-border">
                 <th className="px-4 py-2 font-medium sm:px-5">Area</th>
                 <th className="px-2 py-2 text-right font-medium">Points</th>
@@ -240,14 +240,14 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
                 <div className="text-sm">{f.text}</div>
                 <Quote evidence={f.evidence} />
                 <div className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                  <div className="mb-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-muted">Better line</div>
+                  <div className="mb-0.5 text-2xs font-medium uppercase tracking-wide text-muted">Better line</div>
                   {f.betterLine}
                 </div>
               </li>
             ))}
           </ul>
           <div className="rounded-lg border border-brand/30 bg-brand/5 px-3.5 py-3">
-            <div className="mb-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-brand">Tomorrow&apos;s one thing</div>
+            <div className="mb-0.5 text-2xs font-semibold uppercase tracking-wide text-brand">Tomorrow&apos;s one thing</div>
             <p className="text-sm">{result.feedback.tomorrow}</p>
           </div>
         </Card>
@@ -312,7 +312,7 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
                     )}
                   </span>
                   <span className="flex min-w-0 gap-2">
-                    <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[0.65rem] font-semibold tabular-nums text-background">
+                    <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-2xs font-semibold tabular-nums text-background">
                       {q.number}
                     </span>
                     <span>
@@ -364,7 +364,7 @@ function Measure({ label, value, note, bar }: { label: string; value: ReactNode;
           ))}
         </span>
       )}
-      {note && <div className="mt-1 text-[0.7rem] text-muted">{note}</div>}
+      {note && <div className="mt-1 text-2xs text-muted">{note}</div>}
     </div>
   );
 }

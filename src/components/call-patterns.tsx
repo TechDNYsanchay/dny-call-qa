@@ -51,11 +51,11 @@ export function PickupChart({ hours }: { hours: HourStat[] }) {
                       style={{ height: `${Math.max(3, r * 100)}%` }}
                     />
                   ) : (
-                    <span className="mb-1 text-[0.6rem] text-muted">–</span>
+                    <span className="mb-1 text-2xs text-muted">–</span>
                   )}
                 </span>
-                <span className="mt-1 h-5 text-[0.62rem] leading-5 whitespace-nowrap text-muted">{h.hour % 3 === 0 || h.hour === hours[0].hour ? hourLabel(h.hour) : h.hour % 12 || 12}</span>
-                {h.hour === best?.hour && <span className="absolute -top-5 text-[0.65rem] font-semibold tabular-nums">{pct(r)}</span>}
+                <span className="mt-1 h-5 text-2xs leading-5 whitespace-nowrap text-muted">{h.hour % 3 === 0 || h.hour === hours[0].hour ? hourLabel(h.hour) : h.hour % 12 || 12}</span>
+                {h.hour === best?.hour && <span className="absolute -top-5 text-2xs font-semibold tabular-nums">{pct(r)}</span>}
                 <span
                   role="tooltip"
                   className="pointer-events-none absolute bottom-full z-10 mb-1 hidden w-max max-w-48 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs shadow-sm group-hover:block group-focus-visible:block"
@@ -129,7 +129,7 @@ function Tile({ label, value, note }: { label: string; value: React.ReactNode; n
     <div className="rounded-lg border border-border p-3">
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-0.5 text-lg font-semibold tabular-nums">{value}</dd>
-      {note && <div className="text-[0.7rem] text-muted">{note}</div>}
+      {note && <div className="text-2xs text-muted">{note}</div>}
     </div>
   );
 }

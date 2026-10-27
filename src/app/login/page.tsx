@@ -39,7 +39,7 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
             ["No lead goes cold", "missed calls, call-backs and meetings on one follow-up list"],
           ].map(([title, text]) => (
             <li key={title} className="flex gap-3">
-              <span className="mt-1 grid size-4 shrink-0 place-items-center rounded-full bg-foreground text-[0.6rem] text-background" aria-hidden="true">
+              <span className="mt-1 grid size-4 shrink-0 place-items-center rounded-full bg-foreground text-2xs text-background" aria-hidden="true">
                 ✓
               </span>
               <span>

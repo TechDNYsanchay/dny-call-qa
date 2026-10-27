@@ -162,7 +162,7 @@ function PersonRow({ person: p, meId, editing, onEdit, onDone }: { person: TeamM
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{p.name}</span>
             {p.id === meId && <span className="text-xs text-muted">(you)</span>}
-            <span className="rounded-full border border-border px-2 py-px text-[0.7rem] text-muted">{ROLE_LABEL[p.role]}</span>
+            <span className="rounded-full border border-border px-2 py-px text-2xs text-muted">{ROLE_LABEL[p.role]}</span>
           </div>
           <div className="truncate text-xs text-muted">{contact.length ? contact.join(" · ") : "No email or number yet"}</div>
         </div>

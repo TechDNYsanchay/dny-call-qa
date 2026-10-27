@@ -87,14 +87,14 @@ async function Sheets() {
               <ol className="mt-4 grid gap-x-8 lg:grid-cols-2">
                 {sheet.questions.map((q) => (
                   <li key={q.id} className="flex gap-3 border-b border-border py-2.5 last:border-0 lg:[&:nth-last-child(2):nth-child(odd)]:border-0">
-                    <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground text-[0.7rem] font-semibold tabular-nums text-background">
+                    <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground text-2xs font-semibold tabular-nums text-background">
                       {q.number}
                     </span>
                     <div className="min-w-0 text-sm">
                       <div>
                         {q.question}
-                        {q.priority === "good_to_have" && <span className="ml-2 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-[0.68rem] text-muted">Good to have</span>}
-                        {q.runningBusinessOnly && <span className="ml-2 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-[0.68rem] text-muted">RB only</span>}
+                        {q.priority === "good_to_have" && <span className="ml-2 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-2xs text-muted">Good to have</span>}
+                        {q.runningBusinessOnly && <span className="ml-2 inline-block whitespace-nowrap rounded-full border border-border px-1.5 py-px text-2xs text-muted">RB only</span>}
                       </div>
                       {q.captures && <div className="mt-0.5 text-xs text-muted">Captures {q.captures}</div>}
                     </div>

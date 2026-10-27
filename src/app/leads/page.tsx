@@ -95,7 +95,7 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
       <Card>
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
           <table className="w-full min-w-[880px] text-sm">
-            <thead className="text-left text-xs text-muted">
+            <thead className="whitespace-nowrap text-left text-xs text-muted lg:whitespace-normal">
               <tr className="border-b border-border">
                 <th className="px-4 py-2 font-medium sm:px-5">Lead</th>
                 <th className="px-2 py-2 font-medium">What they want</th>
@@ -115,7 +115,7 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
                       <div className="flex items-start gap-3">
                         <Avatar name={c.clientName ?? ""} />
                         <div className="min-w-0">
-                          <Link href={`/leads/${lead.id}`} title={name} className="block max-w-[12rem] truncate font-medium hover:underline">
+                          <Link href={`/leads/${lead.id}`} title={name} className="block max-w-[11rem] truncate font-medium hover:underline xl:max-w-[12rem]">
                             {name}
                           </Link>
                           <div className="text-xs text-muted">
@@ -124,7 +124,7 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
                         </div>
                       </div>
                     </td>
-                    <td className="max-w-[18rem] px-2 py-3.5">
+                    <td className="max-w-[15rem] px-2 py-3.5 xl:max-w-[18rem]">
                       <div className="font-medium">{what || <span className="font-normal text-muted">–</span>}</div>
                       {c.concept && (
                         <div className="truncate text-xs text-muted" title={c.concept}>
@@ -145,7 +145,7 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
                         )}
                       </div>
                     </td>
-                    <td className="max-w-[11rem] px-2 py-3.5">
+                    <td className="max-w-[9.5rem] px-2 py-3.5 xl:max-w-[11rem]">
                       {c.vcDateTime ? (
                         // The date at a glance; the meeting as said, on one line with the rest on hover.
                         <span className="flex items-start gap-1.5" title={c.vcDateTime}>

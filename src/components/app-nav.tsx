@@ -96,7 +96,7 @@ export function AppNav({ groups, user, latest, sample }: Props) {
   return (
     <>
       {sample && (
-        <span className="hidden whitespace-nowrap rounded-full bg-warning/15 px-2 py-0.5 text-[0.7rem] font-medium sm:inline lg:hidden xl:inline" title={latest ? `Sample data · ${latest}` : "Sample data"}>
+        <span className="hidden whitespace-nowrap rounded-full bg-warning/15 px-2 py-0.5 text-2xs font-medium sm:inline lg:hidden xl:inline" title={latest ? `Sample data · ${latest}` : "Sample data"}>
           Sample data
         </span>
       )}
@@ -236,7 +236,7 @@ function MoreMenu({ groups, current }: { groups: NavGroup[]; current: string | n
       <div id="more-menu" inert={!open} className={`${POPOVER} left-0 mt-px w-80 origin-top-left ${popoverState(open)}`}>
         {groups.map((g, gi) => (
           <div key={g.title} className={gi > 0 ? "mt-1 border-t border-border pt-1" : ""}>
-            <div className="px-2.5 pb-1 pt-2 text-[0.68rem] font-semibold uppercase tracking-wider text-muted">{g.title}</div>
+            <div className="px-2.5 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wider text-muted">{g.title}</div>
             {g.items.map((item) => {
               const on = item.href === current;
               return (
@@ -295,7 +295,7 @@ function SearchBox() {
         aria-label="Search leads and calls"
         className="peer h-8 w-60 rounded-lg border border-border bg-background pl-8 pr-8 text-xs outline-none transition-[border-color,box-shadow] placeholder:text-muted focus:border-foreground/30 focus:shadow-[0_0_0_3px_rgb(0_0_0/0.04)] [&::-webkit-search-cancel-button]:hidden"
       />
-      <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-surface px-1.5 font-mono text-[0.65rem] leading-4 text-muted peer-focus:opacity-0">
+      <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-surface px-1.5 font-mono text-2xs leading-4 text-muted peer-focus:opacity-0">
         /
       </kbd>
     </form>
@@ -358,7 +358,7 @@ function UserMark({ name, large = false }: { name: string; large?: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`grid shrink-0 place-items-center rounded-full bg-foreground font-semibold text-background ${large ? "size-10 text-sm" : "size-7 text-[0.68rem]"}`}
+      className={`grid shrink-0 place-items-center rounded-full bg-foreground font-semibold text-background ${large ? "size-10 text-sm" : "size-7 text-2xs"}`}
     >
       {initials(name)}
     </span>
@@ -488,7 +488,7 @@ function MobileMenu({
 
           {groups.map((g, gi) => (
             <section key={g.title} aria-labelledby={`menu-group-${gi}`} {...enter(gi + 1)}>
-              <h2 id={`menu-group-${gi}`} className="mb-2 px-1 text-[0.7rem] font-semibold uppercase tracking-wider text-muted">
+              <h2 id={`menu-group-${gi}`} className="mb-2 px-1 text-2xs font-semibold uppercase tracking-wider text-muted">
                 {g.title}
               </h2>
               <ul className="mb-6 overflow-hidden rounded-2xl border border-border bg-surface">
@@ -510,7 +510,7 @@ function MobileMenu({
                           <Icon name={item.icon} />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[0.95rem] font-medium leading-snug">{item.label}</span>
+                          <span className="block text-base font-medium leading-snug">{item.label}</span>
                           <span className="block truncate text-xs text-muted">{item.hint}</span>
                         </span>
                         {active ? (
@@ -566,7 +566,7 @@ function MobileMenu({
 }
 
 export function LogoMark() {
-  return <span className="grid size-7 place-items-center rounded-md bg-brand text-[0.7rem] font-bold tracking-tight text-white">DNY</span>;
+  return <span className="grid size-7 place-items-center rounded-md bg-brand text-2xs font-bold tracking-tight text-white">DNY</span>;
 }
 
 const PATHS: Record<NavIconName | "search" | "menu" | "close" | "signout", ReactNode> = {

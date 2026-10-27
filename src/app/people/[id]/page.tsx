@@ -88,7 +88,7 @@ async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[i
 
       {report.tomorrow && (
         <div className="mb-6 rounded-xl border border-brand/30 bg-brand/5 px-4 py-3.5 sm:px-5">
-          <div className="mb-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-brand">Tomorrow&apos;s one thing</div>
+          <div className="mb-0.5 text-2xs font-semibold uppercase tracking-wide text-brand">Tomorrow&apos;s one thing</div>
           <p className="text-base">{report.tomorrow}</p>
         </div>
       )}
@@ -131,7 +131,7 @@ async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[i
                     <HearIt href={`/calls/${f.callId}`} />
                   </div>
                   <div className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                    <div className="mb-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-muted">Better line</div>
+                    <div className="mb-0.5 text-2xs font-medium uppercase tracking-wide text-muted">Better line</div>
                     {f.betterLine}
                   </div>
                 </li>
@@ -168,7 +168,7 @@ async function PersonReport({ params, searchParams }: Pick<PageProps<"/people/[i
           )}
           {report.bestCall && (
             <div className="mt-3 rounded-lg border border-border px-3 py-2.5 text-sm">
-              <div className="text-[0.7rem] font-medium uppercase tracking-wide text-muted">Best call of the day</div>
+              <div className="text-2xs font-medium uppercase tracking-wide text-muted">Best call of the day</div>
               <Link href={`/calls/${report.bestCall.call.id}`} className="font-medium hover:underline">
                 {report.bestCall.call.client.name} at {formatClock(report.bestCall.call.startedAt)}
               </Link>
@@ -253,7 +253,7 @@ function Measure({ label, value, note, bar }: { label: string; value: ReactNode;
           ))}
         </span>
       )}
-      <div className="mt-1 text-[0.7rem] text-muted">{note}</div>
+      <div className="mt-1 text-2xs text-muted">{note}</div>
     </div>
   );
 }
@@ -268,7 +268,7 @@ function FocusCard({ focus, label, progress, controls }: { focus: Focus | null; 
   if (!focus || !label || !progress) {
     return (
       <Card className="mb-6">
-        <div className="mb-3 text-[0.7rem] font-semibold uppercase tracking-wide text-brand">Coaching focus</div>
+        <div className="mb-3 text-2xs font-semibold uppercase tracking-wide text-brand">Coaching focus</div>
         <p className="mb-3 text-sm text-muted">No focus set. Pick one question to ask on every call, or one area to get to Met; the report tracks it each day.</p>
         {controls}
       </Card>
@@ -282,7 +282,7 @@ function FocusCard({ focus, label, progress, controls }: { focus: Focus | null; 
     <Card className="mb-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[0.7rem] font-semibold uppercase tracking-wide text-brand">Coaching focus</div>
+          <div className="text-2xs font-semibold uppercase tracking-wide text-brand">Coaching focus</div>
           <p className="mt-1 text-base font-medium">{focus.kind === "question" ? `Ask on every call: “${label}”` : label}</p>
           {focus.note && <p className="mt-0.5 text-sm text-muted">{focus.note}</p>}
           <p className="mt-1 text-xs text-muted">
@@ -324,7 +324,7 @@ function FocusCard({ focus, label, progress, controls }: { focus: Focus | null; 
               <span className="flex h-10 w-full items-end overflow-hidden rounded-t-[3px] bg-border">
                 {d.total > 0 && <span className="block w-full bg-series" style={{ height: `${Math.max(6, (d.hit / d.total) * 100)}%` }} />}
               </span>
-              <span className="mt-1 text-[0.6rem] tabular-nums text-muted">{Number(d.day.slice(8))}</span>
+              <span className="mt-1 text-2xs tabular-nums text-muted">{Number(d.day.slice(8))}</span>
               <span role="tooltip" className="pointer-events-none absolute bottom-full z-10 mb-1 hidden w-max rounded-md border border-border bg-surface px-2 py-1 text-xs shadow-sm group-hover:block group-focus-visible:block">
                 {formatShortDay(d.day)}: {d.total ? `${verb} on ${d.hit} of ${d.total}` : "no scored calls"}
               </span>

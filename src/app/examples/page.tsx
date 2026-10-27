@@ -124,7 +124,7 @@ async function Examples() {
                 <ul className="mt-4 space-y-4">
                   {mine.map((ex) => (
                     <li key={ex.id} className="rounded-lg border border-border bg-background/50 p-3.5">
-                      <blockquote className="text-[0.95rem] leading-relaxed">“{ex.quote}”</blockquote>
+                      <blockquote className="text-base leading-relaxed">“{ex.quote}”</blockquote>
                       <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2.5 text-xs text-muted">
                           <Avatar name={nameOf(ex.personId)} />
@@ -161,7 +161,7 @@ async function Examples() {
                       {options.map((c) => (
                         <li key={`${c.callId}:${c.startSec}`} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 transition-colors hover:bg-background/60 sm:px-5">
                           <div className="flex min-w-0 items-start gap-2.5">
-                            <span className={`mt-0.5 shrink-0 rounded px-1.5 py-px text-[0.65rem] font-semibold uppercase tracking-wide ${c.speaker === "agent" ? "bg-foreground text-background" : "border border-border text-muted"}`}>
+                            <span className={`mt-0.5 shrink-0 rounded px-1.5 py-px text-2xs font-semibold uppercase tracking-wide ${c.speaker === "agent" ? "bg-foreground text-background" : "border border-border text-muted"}`}>
                               {c.speaker === "agent" ? "DNY" : "Client"}
                             </span>
                             <div className="min-w-0 text-sm">

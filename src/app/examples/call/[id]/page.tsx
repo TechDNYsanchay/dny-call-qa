@@ -93,7 +93,7 @@ async function SharedCall({ params, searchParams }: PageProps<"/examples/call/[i
                   <li key={`${m.questionId}:${m.startSec}`} className="rounded-lg border border-border bg-background/50 p-3">
                     {q && (
                       <div className="mb-1.5 flex items-center gap-2 text-xs text-muted">
-                        <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[0.65rem] font-semibold tabular-nums text-background">
+                        <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-2xs font-semibold tabular-nums text-background">
                           {q.number}
                         </span>
                         {q.question}

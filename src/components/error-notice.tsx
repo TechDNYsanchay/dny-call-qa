@@ -46,7 +46,7 @@ export function ErrorNotice({ error }: { error: unknown }) {
           Go to the home page
         </a>
       </div>
-      {digest && <p className="mt-8 font-mono text-[0.7rem] text-muted">Reference {digest}</p>}
+      {digest && <p className="mt-8 font-mono text-2xs text-muted">Reference {digest}</p>}
     </div>
   );
 }

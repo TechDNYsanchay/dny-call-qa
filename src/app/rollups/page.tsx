@@ -126,7 +126,7 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
       <Card title={me.canSeeAll ? "Leaderboard" : "My calls"} className="mb-6">
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
           <table className="w-full min-w-[900px] text-sm">
-            <thead className="text-left text-xs text-muted">
+            <thead className="whitespace-nowrap text-left text-xs text-muted lg:whitespace-normal">
               <tr className="border-b border-border">
                 <th className="px-4 py-2 font-medium sm:px-5">Person</th>
                 <th className="px-2 py-2 font-medium">Average</th>
