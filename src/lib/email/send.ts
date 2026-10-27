@@ -3,7 +3,7 @@
 
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
-import type { Email } from "./report-emails";
+import { inlineImages, type Email } from "./report-emails";
 
 export class MailNotConfigured extends Error {}
 
@@ -30,5 +30,7 @@ export async function sendEmail(to: string, email: Email): Promise<void> {
     subject: email.subject,
     html: email.html,
     text: email.text,
+    // The logo at the top travels inside the email, so it shows without "display images".
+    attachments: inlineImages(email),
   });
 }

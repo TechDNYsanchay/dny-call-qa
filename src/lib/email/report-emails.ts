@@ -8,6 +8,7 @@ import { formatClock, formatDay, formatDuration, formatPhone, hardFailLabel } fr
 import type { PersonDayReport, TeamSummary } from "@/lib/reports";
 import { FUNNEL_STAGES, pctOf, type Funnel, type PersonRollup, type Rollup } from "@/lib/rollups";
 import type { Band } from "@/lib/scoring/compute";
+import { EMAIL_LOGO } from "./email-logo";
 
 export interface Email {
   subject: string;
@@ -46,13 +47,19 @@ const QUOTE = "margin:4px 0 0;padding-left:10px;border-left:3px solid #e5e4df;co
 function layout(title: string, body: string, footerLink: { href: string; label: string }): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head><body style="margin:0;padding:24px 16px;background:#fcfcfb;color:#1c1c1a;font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
 <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #e5e4df;border-radius:12px;padding:24px">
-<p style="${P};font-size:12px;${MUTED}">DNY Sales Agent · call QA</p>
+<img src="cid:${EMAIL_LOGO.cid}" width="${EMAIL_LOGO.width}" height="${EMAIL_LOGO.height}" alt="DNY Sales Agent" style="display:block;border:0;margin:0 0 18px">
 <h1 style="font-size:20px;margin:0 0 16px">${esc(title)}</h1>
 ${body}
 <p style="margin:24px 0 0"><a href="${esc(footerLink.href)}" style="color:#c23b2f;font-weight:600">${esc(footerLink.label)}</a></p>
 </div>
 <p style="max-width:600px;margin:12px auto 0;font-size:12px;${MUTED}">Scored by DNY's QA agent against the call sheets and the scoring brief. Every finding quotes the call; open a call to listen to the moment.</p>
 </body></html>`;
+}
+
+/** The images an email shows inline: the logo at the top, when the email has it. */
+export function inlineImages(email: Email): { filename: string; content: Buffer; cid: string; contentDisposition: "inline" }[] {
+  if (!email.html.includes(`cid:${EMAIL_LOGO.cid}`)) return [];
+  return [{ filename: "dny-sales-agent.png", content: Buffer.from(EMAIL_LOGO.png, "base64"), cid: EMAIL_LOGO.cid, contentDisposition: "inline" }];
 }
 
 function quoteHtml(e: { quote: string; at: string }) {

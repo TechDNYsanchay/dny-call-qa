@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { CALLS, PEOPLE, PREVIOUS_DAYS, REPORT_DATE } from "@/lib/data/sample-data";
 import { personDayReport, teamSummary } from "@/lib/reports";
 import { rollup, weekPeriod } from "@/lib/rollups";
-import { disputeEmail, missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail } from "./report-emails";
+import { EMAIL_LOGO } from "./email-logo";
+import { disputeEmail, inlineImages, missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail } from "./report-emails";
 
 const calls = [...CALLS].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 const person = (id: string) => PEOPLE.find((p) => p.id === id)!;
@@ -141,5 +142,28 @@ describe("coaching focus in the 8 am email", () => {
     expect(email.html).toContain("Your coaching focus");
     expect(email.html).toContain("Yesterday asked on 2 of 3 scored calls");
     expect(email.text).toContain("Focus: Do you have a budget set for this project? (yesterday asked on 2 of 3; since 2026-10-27: 5 of 8)");
+  });
+});
+
+describe("the logo at the top of every email", () => {
+  const r = rollup(weekPeriod(REPORT_DATE), PEOPLE, calls, []);
+  const emails = {
+    person: personReportEmail(personDayReport(person("rohan"), calls), REPORT_DATE, SITE),
+    team: teamSummaryEmail(teamSummary(PEOPLE, calls, PREVIOUS_DAYS), REPORT_DATE, SITE),
+    rollup: teamRollupEmail(r, SITE),
+  };
+
+  it("shows it inline, sized, with the app's name as its text", () => {
+    for (const email of Object.values(emails)) {
+      expect(email.html).toContain(`<img src="cid:${EMAIL_LOGO.cid}" width="92" height="54" alt="DNY Sales Agent"`);
+      const [logo] = inlineImages(email);
+      expect(logo).toMatchObject({ cid: EMAIL_LOGO.cid, contentDisposition: "inline" });
+      // A real PNG: the file starts with its signature.
+      expect(logo.content.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+    }
+  });
+
+  it("attaches nothing to an email without it", () => {
+    expect(inlineImages({ subject: "x", html: "<p>no logo</p>", text: "x" })).toEqual([]);
   });
 });
