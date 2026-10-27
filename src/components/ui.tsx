@@ -253,3 +253,15 @@ export function CalendarIcon() {
     </svg>
   );
 }
+
+/** "Download for Excel": a spreadsheet of what the page shows (CSV, which Excel opens). */
+export function DownloadButton({ href, label = "Download for Excel" }: { href: string; label?: string }) {
+  return (
+    <a href={href} download className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-background">
+      <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
+        <path d="M8 2v8m0 0-3-3m3 3 3-3M3 12.5h10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {label}
+    </a>
+  );
+}

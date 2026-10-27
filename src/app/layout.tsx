@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
+import { InstallApp } from "@/components/install-app";
 import { getCurrentPerson, getReportDay, isSampleData } from "@/lib/data";
 import { formatDay } from "@/lib/format";
 import "./globals.css";
@@ -19,6 +20,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DNY Sales Agent",
   description: "Daily QA scores and coaching for DNY Hospitality's sales calls",
+  applicationName: "DNY Sales Agent",
+  // Opens full screen from the home screen on an iPhone, with this name under the icon.
+  appleWebApp: { capable: true, title: "DNY Sales", statusBarStyle: "default" },
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#222220" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -98,6 +110,7 @@ async function SignedInNav() {
         <span className="text-muted" title={me.email ?? undefined}>
           {me.name}
         </span>
+        <InstallApp />
         <form action="/auth/signout" method="post">
           <button type="submit" className="text-muted underline-offset-2 hover:text-foreground hover:underline">
             Sign out

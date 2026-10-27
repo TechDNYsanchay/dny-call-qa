@@ -5,6 +5,7 @@
 import "server-only";
 import { pipelineReads } from "@/lib/data";
 import { missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { focusHit, focusLabel, focusProgress } from "@/lib/coaching";
 import { forPerson, isOverdue, type MissedItem } from "@/lib/follow-ups";
 import { alert } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email/send";
@@ -80,13 +81,16 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
   // Follow-ups are as of now (the morning the email goes out), not the report day.
   const today = toIst(new Date().toISOString()).slice(0, 10);
-  const [people, calls, previous, sheets, followUps] = await Promise.all([
+  const [people, calls, previous, sheets, followUps, focuses] = await Promise.all([
     pipelineReads.people(),
     pipelineReads.calls(day),
     pipelineReads.previousDayAverages(day),
     pipelineReads.activeSheets(),
     pipelineReads.followUps(today),
+    pipelineReads.focuses(),
   ]);
+  const earliestFocus = focuses.reduce((d, f) => (f.setAt.slice(0, 10) < d ? f.setAt.slice(0, 10) : d), day);
+  const focusCalls = focuses.length ? await pipelineReads.callsBetween(earliestFocus, day) : [];
   const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
   const testInbox = await reportsTestInbox();
 
@@ -123,7 +127,20 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   for (const person of people.filter((p) => SCORED_ROLES.includes(p.role))) {
     const report = personDayReport(person, calls, sheets.questions);
     if (report.calls.length === 0) continue;
-    await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site, { items: forPerson(followUps, person.id), today }));
+    const f = focuses.find((x) => x.personId === person.id);
+    const focus = f
+      ? (() => {
+          const yesterday = report.scored.map((c) => focusHit(c, f)).filter((h) => h !== null);
+          return {
+            label: focusLabel(f, sheets.questions),
+            verb: f.kind === "question" ? "asked" : "Met",
+            yesterday: { hit: yesterday.filter(Boolean).length, total: yesterday.length },
+            since: focusProgress(focusCalls, f, day).since,
+            setDay: f.setAt.slice(0, 10),
+          };
+        })()
+      : undefined;
+    await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site, { items: forPerson(followUps, person.id), today }, focus));
   }
 
   // Founders, managers and admins get the team summary (one copy to the test inbox while testing).

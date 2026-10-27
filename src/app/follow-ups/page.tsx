@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
-import { Avatar, CalendarIcon, Card, Loading, PageHeader, QualityPill, StatTile, StatusLabel } from "@/components/ui";
+import { Avatar, CalendarIcon, Card, DownloadButton, Loading, PageHeader, QualityPill, StatTile, StatusLabel } from "@/components/ui";
 import { getFollowUps, listPeople, requireMe } from "@/lib/data";
 import { followUpCount, isOverdue, MISSED_OVERDUE_HOURS, relativeDay, type LeadFollowUp, type MissedItem } from "@/lib/follow-ups";
 import { formatClock, formatPhone, formatShortDay, toIst } from "@/lib/format";
@@ -42,7 +42,9 @@ async function FollowUpList() {
       <PageHeader
         title={me.canSeeAll ? "Follow-ups" : "My follow-ups"}
         subtitle={`${followUpCount(f)} to act on · updated every 15 minutes from Callyzer and each night's scoring`}
-      />
+      >
+        <DownloadButton href="/api/export/follow-ups" />
+      </PageHeader>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile

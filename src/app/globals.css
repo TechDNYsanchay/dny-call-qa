@@ -18,6 +18,8 @@
   --good-ink: #0a7d0a;
   --warning-ink: #9a6700;
   --critical-ink: #c0302f;
+  /* One series in a chart (e.g. pickup by hour). */
+  --series: #2a78d6;
   /* The lead funnel: one blue, darker at each later stage (validated as an ordinal ramp). */
   --funnel-1: #86b6ef;
   --funnel-2: #5598e7;
@@ -35,6 +37,7 @@
     --border: #36352f;
     --brand: #e0574a;
     --chart-muted: #64635c;
+    --series: #3987e5;
     --good-ink: #4fd04f;
     --warning-ink: #f5b432;
     --critical-ink: #f07070;
@@ -58,6 +61,7 @@
   --color-warning: var(--status-warning);
   --color-critical: var(--status-critical);
   --color-chart-muted: var(--chart-muted);
+  --color-series: var(--series);
   --color-good-ink: var(--good-ink);
   --color-warning-ink: var(--warning-ink);
   --color-critical-ink: var(--critical-ink);

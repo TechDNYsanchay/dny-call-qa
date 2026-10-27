@@ -4,6 +4,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import type { Focus } from "@/lib/coaching";
 import { exampleCandidates, type ExampleCandidate } from "@/lib/examples";
 import { followUps, LEAD_WINDOW_DAYS, type FollowUps } from "@/lib/follow-ups";
 import { bestCall, weekStart } from "@/lib/rollups";
@@ -403,7 +404,28 @@ export async function getFollowUps(me: Me, today: string): Promise<FollowUps> {
   return readFollowUps(today, me.canSeeAll ? undefined : me.id);
 }
 
+async function readActiveFocuses(db: Client): Promise<Focus[]> {
+  const { data, error } = await db
+    .from("coaching_focus")
+    .select("id, person_id, kind, target_id, note, set_at, setter:people!coaching_focus_set_by_fkey ( full_name )")
+    .is("ended_at", null);
+  if (error) fail("coaching focus", error);
+  return (data as unknown as { id: string; person_id: string; kind: Focus["kind"]; target_id: string; note: string | null; set_at: string; setter: { full_name: string } | null }[]).map((r) => ({
+    id: r.id,
+    personId: r.person_id,
+    kind: r.kind,
+    targetId: r.target_id,
+    note: r.note,
+    setAt: toIst(r.set_at),
+    setBy: r.setter?.full_name ?? null,
+  }));
+}
+
+/** Each person's current coaching focus (row-level security: executives see their own). */
+export const listActiveFocuses = cache(async () => readActiveFocuses(await supabaseUser()));
+
 export const pipelineReads = {
+  focuses: () => readActiveFocuses(supabaseAdmin()),
   followUps: (today: string) => readFollowUps(today),
   activeSheets: () => readActiveSheets(supabaseAdmin()),
   people: () => readPeople(supabaseAdmin()),
@@ -793,3 +815,6 @@ export async function listCallExamples(callId: string): Promise<{ questionId: st
   if (error) fail("call examples", error);
   return data.map((r) => ({ questionId: r.question_id, startSec: Number(r.start_sec), quote: r.quote }));
 }
+
+/** Every team phone number, so calls between colleagues aren't counted as client calls. Numbers only. */
+export const getTeamPhones = cache(async (): Promise<Set<string>> => readTeamPhones(supabaseAdmin()));

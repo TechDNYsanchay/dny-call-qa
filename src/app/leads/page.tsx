@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Avatar, CalendarIcon, Card, Loading, PageHeader, QualityPill, ScoreFigure, StatTile, StatusLabel } from "@/components/ui";
+import { Avatar, CalendarIcon, Card, DownloadButton, Loading, PageHeader, QualityPill, ScoreFigure, StatTile, StatusLabel } from "@/components/ui";
 import { BUDGET, CLIENT_TYPE, FORMAT } from "@/lib/capture";
 import { LEAD_STATUSES, listLeads, listPeople, requireMe, type LeadStatus } from "@/lib/data";
 import { dateFromText } from "@/lib/follow-ups";
@@ -86,8 +86,9 @@ async function Leads({ searchParams }: Pick<PageProps<"/leads">, "searchParams">
             </Link>
           ))}
         </nav>
-        <span className="ml-auto text-xs text-muted">
+        <span className="ml-auto flex items-center gap-3 text-xs text-muted">
           Showing {shown.length} of {leads.length}
+          <DownloadButton href={`/api/export/leads${href(quality, status).replace("/leads", "")}`} />
         </span>
       </div>
 

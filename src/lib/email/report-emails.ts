@@ -94,7 +94,16 @@ function followUpsHtml(f: FollowUps, today: string, siteUrl: string): string {
   ].join("");
 }
 
-export function personReportEmail(report: PersonDayReport, day: string, siteUrl: string, followUps?: { items: FollowUps; today: string }): Email {
+export interface FocusLine {
+  label: string;
+  /** "asked" for a question, "Met" for an area. */
+  verb: string;
+  yesterday: { hit: number; total: number };
+  since: { hit: number; total: number };
+  setDay: string;
+}
+
+export function personReportEmail(report: PersonDayReport, day: string, siteUrl: string, followUps?: { items: FollowUps; today: string }, focus?: FocusLine): Email {
   const { person } = report;
   const when = shortDay(day);
   const link = (path: string) => `${siteUrl}${path}`;
@@ -132,8 +141,12 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
     ? `<p style="margin:8px 0 0;${MUTED}">${others} other call${others === 1 ? "" : "s"} not scored (under 2 minutes, not a sales call, waiting, or recording missing${report.notRecorded ? `: ${report.notRecorded} missing` : ""}). <a href="${esc(link(`/calls?day=${day}`))}" style="color:#c23b2f">See them all</a></p>`
     : "";
 
+  const focusHtml = focus
+    ? `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid #e5e4df;border-radius:8px"><p style="margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#c23b2f">Your coaching focus</p><p style="margin:4px 0 0;font-weight:600">${esc(focus.label)}</p><p style="margin:4px 0 0;${MUTED}">Yesterday ${focus.verb} on ${focus.yesterday.hit} of ${focus.yesterday.total} scored call${focus.yesterday.total === 1 ? "" : "s"} · since ${esc(shortDay(focus.setDay))}: ${focus.since.hit} of ${focus.since.total}</p></div>`
+    : "";
   const body = [
     `<p style="${P}">${stats.join(" · ")}</p>`,
+    focusHtml,
     strengths && `<h2 style="${H2}">What went well</h2><ul style="padding-left:18px;margin:0">${strengths}</ul>`,
     fixes && `<h2 style="${H2}">Fix next</h2><ul style="padding-left:18px;margin:0">${fixes}</ul>`,
     report.tomorrow && `<h2 style="${H2}">Tomorrow's one thing</h2><p style="${P}">${esc(report.tomorrow)}</p>`,
@@ -149,6 +162,7 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
     `Average ${bandText(report.average, report.band)} · ${scoredLine} · ${report.hardFailCalls} with a hard fail`,
     ...report.fixes.map((f) => `Fix: ${f.text} (${f.evidence.at} "${f.evidence.quote}") Better line: ${f.betterLine}`),
     report.tomorrow ? `Tomorrow: ${report.tomorrow}` : "",
+    focus ? `Focus: ${focus.label} (yesterday ${focus.verb} on ${focus.yesterday.hit} of ${focus.yesterday.total}; since ${focus.setDay}: ${focus.since.hit} of ${focus.since.total})` : "",
     followUps && followUpCount(followUps.items)
       ? `Follow-ups: ${followUps.items.missed.length} missed calls to return, ${followUps.items.callBacks.length} call-backs, ${followUps.items.meetings.length} meetings, ${followUps.items.toBook.length} leads to book (${link("/follow-ups")})`
       : "",

@@ -396,6 +396,54 @@ export type Database = {
           },
         ]
       }
+      coaching_focus: {
+        Row: {
+          ended_at: string | null
+          id: string
+          kind: string
+          note: string | null
+          person_id: string
+          set_at: string
+          set_by: string | null
+          target_id: string
+        }
+        Insert: {
+          ended_at?: string | null
+          id?: string
+          kind: string
+          note?: string | null
+          person_id: string
+          set_at?: string
+          set_by?: string | null
+          target_id: string
+        }
+        Update: {
+          ended_at?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          person_id?: string
+          set_at?: string
+          set_by?: string | null
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coaching_focus_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coaching_focus_set_by_fkey"
+            columns: ["set_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_reports: {
         Row: {
           id: string

@@ -127,3 +127,19 @@ describe("follow-ups in the emails", () => {
     expect(email.html).toContain("missed 2 times, first at Today 10:05");
   });
 });
+
+describe("coaching focus in the 8 am email", () => {
+  it("shows the focus with yesterday and since it was set", () => {
+    const report = personDayReport(PEOPLE.find((p) => p.role === "executive")!, calls);
+    const email = personReportEmail(report, REPORT_DATE, SITE, undefined, {
+      label: "Do you have a budget set for this project?",
+      verb: "asked",
+      yesterday: { hit: 2, total: 3 },
+      since: { hit: 5, total: 8 },
+      setDay: "2026-10-27",
+    });
+    expect(email.html).toContain("Your coaching focus");
+    expect(email.html).toContain("Yesterday asked on 2 of 3 scored calls");
+    expect(email.text).toContain("Focus: Do you have a budget set for this project? (yesterday asked on 2 of 3; since 2026-10-27: 5 of 8)");
+  });
+});

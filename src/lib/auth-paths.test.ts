@@ -4,6 +4,7 @@ import { isPublicPath, safeNextPath } from "./auth-paths";
 describe("public paths", () => {
   it("lets sign-in pages and secret-checked APIs through", () => {
     expect(isPublicPath("/login")).toBe(true);
+    expect(isPublicPath("/manifest.webmanifest")).toBe(true);
     expect(isPublicPath("/auth/callback")).toBe(true);
     expect(isPublicPath("/api/webhooks/callyzer")).toBe(true);
     expect(isPublicPath("/api/cron/sweep")).toBe(true);

@@ -7,6 +7,8 @@ export const NEXT_PATH_COOKIE = "dny_next";
 export function isPublicPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
+    // The install manifest (icons are plain files the proxy never sees).
+    pathname === "/manifest.webmanifest" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/webhooks/") ||
     pathname.startsWith("/api/cron/") ||

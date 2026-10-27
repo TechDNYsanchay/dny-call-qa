@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { PickupChart, ResponseCard } from "@/components/call-patterns";
 import { FunnelChart } from "@/components/funnel";
 import { Avatar, Card, EmptyState, Loading, PageHeader, ScoreFigure, StatTile, StatusLabel, TrendSparkline } from "@/components/ui";
-import { getActiveSheets, getReportDay, listCallsBetween, listPeople, requireMe, type CallRecord } from "@/lib/data";
-import { formatClock, formatDay } from "@/lib/format";
+import { missedResponses, pickupByHour } from "@/lib/call-patterns";
+import { getActiveSheets, getReportDay, getTeamPhones, listCallsBetween, listPeople, requireMe, teamNames, type CallRecord } from "@/lib/data";
+import { addDays, formatClock, formatDay } from "@/lib/format";
 import { daysOf, monthPeriod, rollup, weekPeriod, type Period } from "@/lib/rollups";
 
 export const metadata = { title: "Roll-ups · DNY Sales Agent" };
@@ -51,12 +53,19 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
   const latest = await getReportDay();
   if (!latest) return <EmptyState title="Roll-ups" />;
   const period = periodFrom(await searchParams, latest);
-  const [sheets, people, calls, previousCalls] = await Promise.all([
+  // Calls back can land a few days after a miss, so look a little past the period's end.
+  const lookAhead = addDays(period.to, 3) < latest ? addDays(period.to, 3) : latest > period.to ? latest : period.to;
+  const [sheets, people, calls, previousCalls, withAfter, phones, names] = await Promise.all([
     getActiveSheets(),
     listPeople(),
     listCallsBetween(period.from, period.to),
     listCallsBetween(period.previous.from, period.previous.to),
+    listCallsBetween(period.from, lookAhead),
+    getTeamPhones(),
+    teamNames(),
   ]);
+  const pickup = pickupByHour(calls);
+  const responses = missedResponses(withAfter, phones).filter((r) => r.missedAt.slice(0, 10) >= period.from && r.missedAt.slice(0, 10) <= period.to);
   const r = rollup(period, people, calls, previousCalls, sheets.questions);
   const days = daysOf(period);
   const dayLabels = days.map((d) => formatDay(d).replace(/ \d{4}$/, ""));
@@ -226,6 +235,15 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
           ) : (
             <p className="text-sm text-muted">No call scored Amber or Green in this {period.kind}.</p>
           )}
+        </Card>
+      </div>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <Card title="When clients pick up">
+          <PickupChart hours={pickup} />
+        </Card>
+        <Card title="Response to missed calls">
+          <ResponseCard responses={responses} nameOf={(id) => names.get(id) ?? "A number not on the team list"} showPeople={me.canSeeAll} />
         </Card>
       </div>
 

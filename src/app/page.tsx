@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
 import { Avatar, BandBadge, Card, EmptyState, Loading, PageHeader, ScoreFigure, StatTile, StatusLabel, TrendSparkline } from "@/components/ui";
-import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listCalls, listOpenDisputes, listPeople, previousDayAverages, requireMe } from "@/lib/data";
-import { formatClock, formatDay, hardFailLabel, parseDayParam } from "@/lib/format";
+import { connection } from "next/server";
+import { focusLabel, focusProgress } from "@/lib/coaching";
+import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listActiveFocuses, listCalls, listCallsBetween, listOpenDisputes, listPeople, previousDayAverages, requireMe } from "@/lib/data";
+import { formatClock, formatDay, hardFailLabel, parseDayParam, toIst } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
 
@@ -32,6 +34,17 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
     listOpenDisputes(),
   ]);
   const team = teamSummary(people, calls, previous, sheets.questions);
+  // Each person's coaching focus and how it's going since it was set.
+  const focuses = await listActiveFocuses();
+  const today = await todayIst();
+  const earliest = focuses.reduce((d, f) => (f.setAt.slice(0, 10) < d ? f.setAt.slice(0, 10) : d), today);
+  const focusCalls = focuses.length ? await listCallsBetween(earliest, today) : [];
+  const focusOf = (personId: string) => {
+    const f = focuses.find((x) => x.personId === personId);
+    if (!f) return null;
+    const p = focusProgress(focusCalls, f, today);
+    return { label: focusLabel(f, sheets.questions), since: p.since, verb: f.kind === "question" ? "asked" : "Met" };
+  };
   const scored = calls.filter((c) => c.final);
   const teamAverage = dayAverage(scored.map((c) => c.final!.score));
   const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "Unknown";
@@ -109,6 +122,18 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
                             {report.person.name}
                           </Link>
                           <div className="text-xs text-muted">{report.person.title}</div>
+                          {(() => {
+                            const f = focusOf(report.person.id);
+                            return f ? (
+                              <div className="mt-0.5 max-w-72 truncate text-xs" title={f.label}>
+                                <span className="font-medium text-brand">Focus</span>{" "}
+                                <span className="font-medium tabular-nums">
+                                  {f.verb} {f.since.hit}/{f.since.total}
+                                </span>
+                                <span className="text-muted"> · {f.label}</span>
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       </div>
                     </td>
@@ -196,4 +221,9 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
       </div>
     </>
   );
+}
+
+async function todayIst() {
+  await connection();
+  return toIst(new Date().toISOString()).slice(0, 10);
 }

@@ -13,6 +13,7 @@ export const LEAD_WINDOW_DAYS = 14;
 export const MISSED_WINDOW_DAYS = 7;
 /** Numbers the executive saved on the phone as junk or spam aren't clients. */
 const NOT_A_CLIENT = /\b(junk|spam)\b/i;
+export const isNotAClient = (name: string) => NOT_A_CLIENT.test(name);
 
 export interface MissedItem {
   phone: string;

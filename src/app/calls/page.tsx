@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
-import { Avatar, Card, EmptyState, Loading, PageHeader, ScoreFigure, StatTile, StatusLabel } from "@/components/ui";
+import { Avatar, Card, DownloadButton, EmptyState, Loading, PageHeader, ScoreFigure, StatTile, StatusLabel } from "@/components/ui";
 import type { CallRecord } from "@/lib/data";
 import { getAdjacentDays, getFirstDay, getReportDay, listCalls, listPeople, requireMe } from "@/lib/data";
 import { formatClock, formatDay, formatDuration, formatPhone, IN_PROGRESS_LABEL, NOT_SCORED_LABEL, parseDayParam, STREAM_LABEL } from "@/lib/format";
@@ -59,6 +59,7 @@ async function Calls({ searchParams }: Pick<PageProps<"/calls">, "searchParams">
         }
       >
         <div className="flex flex-wrap items-center gap-3">
+          <DownloadButton href={`/api/export/calls?day=${day}`} />
           <ScoredSwitch scoredOnly={scoredOnly} day={requested} />
           <DayNav path="/calls" day={day} first={first} latest={latest} params={scoredOnly ? { scored: "1" } : {}} {...around} />
         </div>
