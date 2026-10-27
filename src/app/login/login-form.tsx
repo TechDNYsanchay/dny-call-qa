@@ -19,7 +19,8 @@ export function LoginForm({ next, notice, googleEnabled = false }: { next: strin
 
   if (state.sent) {
     return (
-      <div role="status" className="space-y-2 rounded-xl border border-border bg-surface p-4 text-sm">
+      <div role="status" className="space-y-2 rounded-xl border border-border bg-background p-4 text-sm">
+        <p className="font-medium text-good-ink">✓ Check your inbox</p>
         <p>
           If <strong>{state.sent}</strong> is on the DNY team list, a sign-in link is on its way. It works once and expires in an hour.
         </p>
@@ -37,7 +38,7 @@ export function LoginForm({ next, notice, googleEnabled = false }: { next: strin
   return (
     <div className="space-y-4">
       {notice && (
-        <p role="alert" className="rounded-lg border border-critical/40 px-3 py-2 text-sm">
+        <p role="alert" className="rounded-lg border border-critical/40 bg-critical/5 px-3 py-2 text-sm">
           {notice}
         </p>
       )}
@@ -74,17 +75,17 @@ export function LoginForm({ next, notice, googleEnabled = false }: { next: strin
           required
           autoComplete="email"
           placeholder="you@dnyhospitality.com"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-foreground"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground/50"
         />
         {state.error && (
-          <p role="alert" className="text-sm text-critical">
+          <p role="alert" className="text-sm text-critical-ink">
             {state.error}
           </p>
         )}
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+          className="w-full rounded-lg bg-brand px-3 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Sending…" : "Email me a sign-in link"}
         </button>
