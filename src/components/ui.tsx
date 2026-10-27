@@ -95,13 +95,19 @@ export function ScoreFigure({ score, band, size = "lg" }: { score: number; band:
 export function Avatar({ name }: { name: string }) {
   const initials = name
     .split(/\s+/)
-    .filter(Boolean)
+    .filter((w) => /^\p{L}/u.test(w))
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join("");
   return (
     <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold text-muted" aria-hidden="true">
-      {initials || "?"}
+      {initials || (
+        // No name yet: a plain person outline.
+        <svg viewBox="0 0 16 16" className="size-3.5">
+          <circle cx="8" cy="5.5" r="2.75" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M2.75 14c.6-2.7 2.7-4.25 5.25-4.25s4.65 1.55 5.25 4.25" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      )}
     </span>
   );
 }
