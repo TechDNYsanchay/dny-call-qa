@@ -25,16 +25,19 @@ export interface BuildResult {
   reportsStored: number;
 }
 
-/** Flags long calls whose recording never arrived ("missing", never a zero) and stores each person's day. */
+/**
+ * Flags long calls whose recording never arrived ("missing", never a zero) and stores each person's day.
+ * Earlier days count too, so a call the job never looked at (or a day it didn't run) isn't left waiting.
+ * If the recording turns up later after all, copyRecording puts the call back in line for scoring.
+ */
 export async function buildDailyReports(day: string): Promise<BuildResult> {
   const db = supabaseAdmin();
-  const [from, to] = istDayRange(day);
+  const [, to] = istDayRange(day);
   const { data: flagged, error: flagError } = await db
     .from("calls")
     .update({ recording_status: "missing", scoring_status: "not_eligible", not_scored_reason: "recording_missing", transcript_status: "not_needed" })
     .eq("recording_status", "pending")
     .gte("duration_sec", MIN_SCORED_DURATION_SEC)
-    .gte("started_at", from)
     .lt("started_at", to)
     .select("id");
   if (flagError) throw new Error(`flag missing recordings: ${flagError.message}`);

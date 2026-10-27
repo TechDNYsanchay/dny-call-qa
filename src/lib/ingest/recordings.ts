@@ -47,5 +47,12 @@ export async function copyRecording(call: { callId: string; url: string; started
 
   const { error } = await db.from("calls").update({ recording_path: path, recording_status: "available" }).eq("id", call.callId);
   if (error) throw new Error(`call update: ${error.message}`);
+  // A recording that arrives after the morning job flagged it missing: transcribe and score it after all.
+  const { error: requeueError } = await db
+    .from("calls")
+    .update({ transcript_status: "pending", scoring_status: "waiting", not_scored_reason: null })
+    .eq("id", call.callId)
+    .eq("not_scored_reason", "recording_missing");
+  if (requeueError) throw new Error(`call requeue: ${requeueError.message}`);
   return path;
 }
