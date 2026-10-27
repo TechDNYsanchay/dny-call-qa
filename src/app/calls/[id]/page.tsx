@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { RecordingPlayer, Transcript } from "@/components/call-recording";
 import { DisputeForm } from "@/components/score-dispute";
 import { ScoreReview } from "@/components/score-review";
-import { BandBadge, Card, Chip, Loading, PageHeader, Quote } from "@/components/ui";
+import { BandBadge, bandInk, Card, Chip, LevelPoints, LevelStatus, Loading, PageHeader, Quote, StatusLabel } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
 import { getCall, getCallSheet, getPerson, requireMe, type CallRecord } from "@/lib/data";
 import {
@@ -159,16 +159,15 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
                   <tr key={area.id} className="border-b border-border align-top last:border-0">
                     <td className="px-4 py-3 sm:px-5">
                       <div className="font-medium">{area.name}</div>
-                      <div className="text-xs text-muted">
-                        {level === 10 ? "Met" : level === 5 ? "Partial" : "Missed"} · weight {area.weight}
+                      <div className="mt-0.5 text-xs text-muted">
+                        <LevelStatus level={level} /> · weight {area.weight}
                       </div>
                       {call.review?.verdict === "corrected" && call.review.ai && call.review.ai.levels[area.id] !== level && (
                         <div className="text-xs text-muted">Corrected · AI gave {call.review.ai.levels[area.id]}</div>
                       )}
                     </td>
-                    <td className="px-2 py-3 text-right tabular-nums">
-                      {(area.weight * level) / 10}
-                      <span className="text-muted">/{area.weight}</span>
+                    <td className="px-2 py-3 text-right">
+                      <LevelPoints level={level} weight={area.weight} />
                     </td>
                     <td className="space-y-1 px-4 py-3 sm:px-5">
                       <p>{a.reason}</p>
@@ -185,7 +184,10 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
             <tfoot>
               <tr className="border-t border-border font-semibold">
                 <td className="px-4 py-3 sm:px-5">Call score</td>
-                <td className="px-2 py-3 text-right tabular-nums">{final.score}/100</td>
+                <td className="px-2 py-3 text-right tabular-nums">
+                  <span className={`text-base ${bandInk(final.band)}`}>{final.score}</span>
+                  <span className="font-normal text-muted">/100</span>
+                </td>
                 <td className="px-4 py-3 sm:px-5">
                   <BandBadge band={final.band} />
                 </td>
@@ -249,8 +251,14 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
               const status = item?.status ?? "missed";
               return (
                 <li key={q.id} className="flex gap-3 text-sm">
-                  <span className="w-20 shrink-0 text-xs text-muted">
-                    {status === "covered" ? "✓ Covered" : status === "partly" ? "◐ Partly" : status === "not_applicable" ? "– N/A" : "✕ Missed"}
+                  <span className="w-20 shrink-0 pt-px text-xs">
+                    {status === "not_applicable" ? (
+                      <span className="text-muted">N/A</span>
+                    ) : (
+                      <StatusLabel band={status === "covered" ? "green" : status === "partly" ? "amber" : "red"}>
+                        {status === "covered" ? "Covered" : status === "partly" ? "Partly" : "Missed"}
+                      </StatusLabel>
+                    )}
                   </span>
                   <span>
                     {q.number}. {q.question}

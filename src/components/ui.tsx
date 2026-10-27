@@ -20,6 +20,47 @@ function BandShape({ band }: { band: Band }) {
   );
 }
 
+/** A scorecard level (10 met, 5 partial, 0 missed) read as a band, for its colour and shape. */
+const LEVEL_BAND: Record<number, Band> = { 10: "green", 5: "amber", 0: "red" };
+const LEVEL_WORD: Record<number, string> = { 10: "Met", 5: "Partial", 0: "Missed" };
+const INK: Record<Band, string> = { green: "text-good-ink", amber: "text-warning-ink", red: "text-critical-ink" };
+const FILL: Record<Band, string> = { green: "bg-good", amber: "bg-warning", red: "bg-critical" };
+
+/** A word in a band's colour after its shape, so it reads without colour too. */
+export function StatusLabel({ band, children }: { band: Band; children: ReactNode }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 font-medium ${INK[band]}`}>
+      <BandShape band={band} />
+      {children}
+    </span>
+  );
+}
+
+/** "▲ Partial" for a scorecard level. */
+export function LevelStatus({ level }: { level: number }) {
+  return <StatusLabel band={LEVEL_BAND[level] ?? "amber"}>{LEVEL_WORD[level] ?? level}</StatusLabel>;
+}
+
+/** Points earned in the level's colour, out of the area's weight, with a small meter beneath. */
+export function LevelPoints({ level, weight }: { level: number; weight: number }) {
+  const band = LEVEL_BAND[level] ?? "amber";
+  const points = (weight * level) / 10;
+  return (
+    <div className="inline-flex flex-col items-end gap-1.5" title={`${points} of ${weight} points`}>
+      <span className="tabular-nums">
+        <span className={`text-base font-semibold ${INK[band]}`}>{points}</span>
+        <span className="text-muted">/{weight}</span>
+      </span>
+      <span className="block h-1 w-12 overflow-hidden rounded-full bg-border" aria-hidden="true">
+        <span className={`block h-full rounded-full ${FILL[band]}`} style={{ width: `${(level / 10) * 100}%` }} />
+      </span>
+    </div>
+  );
+}
+
+/** The band's text colour, e.g. for a call's total. */
+export const bandInk = (band: Band) => INK[band];
+
 export function BandBadge({ band, score }: { band: Band; score?: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-surface px-2 py-0.5 text-xs font-medium tabular-nums">

@@ -14,6 +14,10 @@
   --status-warning: #fab219;
   --status-critical: #d03b3b;
   --chart-muted: #b6b5ae;
+  /* Status colours dark enough to read as text (the ones above are for marks and fills). */
+  --good-ink: #0a7d0a;
+  --warning-ink: #9a6700;
+  --critical-ink: #c0302f;
   /* The lead funnel: one blue, darker at each later stage (validated as an ordinal ramp). */
   --funnel-1: #86b6ef;
   --funnel-2: #5598e7;
@@ -31,6 +35,9 @@
     --border: #36352f;
     --brand: #e0574a;
     --chart-muted: #64635c;
+    --good-ink: #4fd04f;
+    --warning-ink: #f5b432;
+    --critical-ink: #f07070;
     /* Lighter at each later stage on the dark surface. */
     --funnel-1: #1c5cab;
     --funnel-2: #2a78d6;
@@ -51,6 +58,9 @@
   --color-warning: var(--status-warning);
   --color-critical: var(--status-critical);
   --color-chart-muted: var(--chart-muted);
+  --color-good-ink: var(--good-ink);
+  --color-warning-ink: var(--warning-ink);
+  --color-critical-ink: var(--critical-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
