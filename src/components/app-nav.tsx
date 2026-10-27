@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { InstallApp } from "@/components/install-app";
+import { Logo } from "@/components/logo";
 
 export type NavIconName = "team" | "report" | "followups" | "calls" | "leads" | "rollups" | "examples" | "scorecards" | "sheets" | "members";
 
@@ -451,9 +452,8 @@ function MobileMenu({
       style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
-        <Link href="/" onClick={() => onClose(false)} className="flex items-center gap-2 font-semibold tracking-tight">
-          <LogoMark />
-          Sales Agent
+        <Link href="/" onClick={() => onClose(false)} className="flex items-center">
+          <Logo small className="h-9 w-auto" />
         </Link>
         <button
           ref={closeButton}
@@ -563,10 +563,6 @@ function MobileMenu({
     </div>,
     document.body,
   );
-}
-
-export function LogoMark() {
-  return <span className="grid size-7 place-items-center rounded-md bg-brand text-2xs font-bold tracking-tight text-white">DNY</span>;
 }
 
 const PATHS: Record<NavIconName | "search" | "menu" | "close" | "signout", ReactNode> = {

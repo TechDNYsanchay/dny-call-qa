@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { Logo } from "@/components/logo";
 import { LevelPoints, LevelStatus, ScoreFigure } from "@/components/ui";
 import { LoginForm } from "./login-form";
 
@@ -18,7 +19,7 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
     <div className="mx-auto grid max-w-5xl items-center gap-8 py-4 sm:py-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-14">
       {/* Sign-in first on a phone, beside the introduction on a laptop. */}
       <div className="order-1 rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7 lg:order-2">
-        <span className="grid size-10 place-items-center rounded-lg bg-brand text-sm font-bold text-white">DNY</span>
+        <Logo className="h-14 w-auto" />
         <h1 className="mt-5 text-xl font-semibold tracking-tight sm:text-2xl">Sign in</h1>
         <p className="mb-6 mt-1 text-sm text-muted">
           {GOOGLE_ENABLED ? "Use your DNY Google account, or get a one-time email link." : "We'll email you a one-time link. No password needed."}

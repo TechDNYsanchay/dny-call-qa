@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
-import { AppNav, LogoMark, type NavGroup } from "@/components/app-nav";
+import { AppNav, type NavGroup } from "@/components/app-nav";
+import { Logo } from "@/components/logo";
 import { getCurrentPerson, getReportDay, isSampleData, type Me } from "@/lib/data";
 import { formatDay } from "@/lib/format";
 import { fontClasses } from "./fonts";
@@ -14,7 +15,6 @@ export const metadata: Metadata = {
   applicationName: "DNY Sales Agent",
   // Opens full screen from the home screen on an iPhone, with this name under the icon.
   appleWebApp: { capable: true, title: "DNY Sales", statusBarStyle: "default" },
-  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
@@ -32,9 +32,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur-md print:static">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-x-5 px-4">
-            <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-              <LogoMark />
-              Sales Agent
+            <Link href="/" className="flex shrink-0 items-center">
+              <Logo small className="h-9 w-auto lg:h-10" />
             </Link>
             <Suspense fallback={null}>
               <SignedInNav />

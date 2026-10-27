@@ -10,6 +10,8 @@
   --muted: #6b6b65;
   --border: #e5e4df;
   --brand: #c23b2f;
+  /* "ny" and SALES AGENT in the logo: the website's brown, cream on dark. */
+  --logo-ink: #665242;
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-critical: #d03b3b;
@@ -36,6 +38,7 @@
     --muted: #a3a39b;
     --border: #36352f;
     --brand: #e0574a;
+    --logo-ink: #f1ebe4;
     --chart-muted: #64635c;
     --series: #3987e5;
     --good-ink: #4fd04f;
@@ -57,6 +60,7 @@
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-brand: var(--brand);
+  --color-logo-ink: var(--logo-ink);
   --color-good: var(--status-good);
   --color-warning: var(--status-warning);
   --color-critical: var(--status-critical);

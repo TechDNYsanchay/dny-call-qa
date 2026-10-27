@@ -1,7 +1,7 @@
 "use client";
 
-import { LogoMark } from "@/components/app-nav";
 import { ErrorNotice } from "@/components/error-notice";
+import { Logo } from "@/components/logo";
 import { fontClasses } from "./fonts";
 import "./globals.css";
 
@@ -15,9 +15,8 @@ export default function GlobalError({ error }: { error: unknown; retry: () => vo
           <div className="mx-auto flex h-14 max-w-6xl items-center px-4">
             {/* A full load on purpose: after an error the header needs reloading too. */}
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-            <a href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-              <LogoMark />
-              Sales Agent
+            <a href="/" className="flex items-center">
+              <Logo small className="h-9 w-auto lg:h-10" />
             </a>
           </div>
         </header>
