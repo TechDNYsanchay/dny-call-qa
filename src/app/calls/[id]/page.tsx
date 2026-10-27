@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { RecordingPlayer, Transcript } from "@/components/call-recording";
 import { DisputeForm } from "@/components/score-dispute";
 import { ScoreReview } from "@/components/score-review";
-import { BandBadge, bandInk, Card, Chip, LevelPoints, LevelStatus, Loading, PageHeader, Quote, StatusLabel } from "@/components/ui";
+import { Avatar, BandBadge, bandInk, Card, LevelPoints, LevelStatus, Loading, Quote, ScoreFigure, StatusLabel } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
 import { getCall, getCallSheet, getPerson, requireMe, type CallRecord } from "@/lib/data";
 import {
@@ -41,22 +41,41 @@ async function CallDetail({ params, searchParams }: PageProps<"/calls/[id]">) {
   const call = await getCall(id);
   if (!call) notFound();
   const person = await getPerson(call.personId);
+  // Callyzer often knows only the number; scoring captures the name the client gave.
+  const spokenName = call.result?.stream === "first_call" ? call.result.capture.clientName : null;
 
   return (
     <>
       <Link href={`/calls?day=${call.startedAt.slice(0, 10)}`} className="mb-3 inline-block text-sm text-muted hover:text-foreground">
         ← Calls on {formatDay(call.startedAt)}
       </Link>
-      <PageHeader
-        title={call.client.city ? `${call.client.name} · ${call.client.city}` : call.client.name}
-        subtitle={`${STREAM_LABEL[call.stream]} by ${person?.name ?? (call.stream === "vision_call" ? "a consultant not on the team list" : `a number not on the team list (${call.agentPhone ?? "unknown"})`)} · ${formatDay(call.startedAt)}, ${formatClock(call.startedAt)} · ${formatDuration(call.durationSec)}`}
-      >
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <Avatar name={person?.name ?? ""} />
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-balance sm:text-2xl">
+              {spokenName ?? call.client.name}
+              {call.client.city && <span className="font-normal text-muted"> · {call.client.city}</span>}
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              {[
+                STREAM_LABEL[call.stream],
+                `by ${person?.name ?? (call.stream === "vision_call" ? "a consultant not on the team list" : `a number not on the team list (${call.agentPhone ?? "unknown"})`)}`,
+                `${formatDay(call.startedAt)}, ${formatClock(call.startedAt)}`,
+                formatDuration(call.durationSec),
+                spokenName && spokenName !== call.client.name ? call.client.name : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+        </div>
         {call.final ? (
-          <BandBadge score={call.final.score} band={call.final.band} />
+          <ScoreFigure score={call.final.score} band={call.final.band} />
         ) : (
-          <Chip>{call.notScored ? NOT_SCORED_LABEL[call.notScored] : call.inProgress ? IN_PROGRESS_LABEL[call.inProgress] : "Not scored"}</Chip>
+          <span className="text-sm text-muted">{call.notScored ? NOT_SCORED_LABEL[call.notScored] : call.inProgress ? IN_PROGRESS_LABEL[call.inProgress] : "Not scored"}</span>
         )}
-      </PageHeader>
+      </div>
 
       <RecordingPlayer
         startAt={startAt}
@@ -113,7 +132,9 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
         <Card className="border-critical/40">
           {final.hardFails.length > 0 && (
             <>
-              <h2 className="mb-2 text-sm font-semibold">Hard fail: the call is red whatever the score</h2>
+              <h2 className="mb-3 text-sm font-semibold">
+                <StatusLabel band="red">Hard fail</StatusLabel> <span className="font-normal text-muted">· the call is Red whatever the score</span>
+              </h2>
               <ul className="mb-3 space-y-2">
                 {final.hardFails.map((id) => {
                   const judged = result.hardFails.find((h) => h.id === id);
@@ -199,8 +220,10 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Coaching">
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Strengths</h3>
-          <ul className="mb-4 space-y-2">
+          <h3 className="mb-2 text-xs font-medium">
+            <StatusLabel band="green">What went well</StatusLabel>
+          </h3>
+          <ul className="mb-5 space-y-3">
             {result.feedback.strengths.map((s, i) => (
               <li key={i}>
                 <div className="text-sm">{s.text}</div>
@@ -208,28 +231,56 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
               </li>
             ))}
           </ul>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Fixes</h3>
-          <ul className="mb-4 space-y-3">
+          <h3 className="mb-2 text-xs font-medium">
+            <StatusLabel band="amber">Fix next</StatusLabel>
+          </h3>
+          <ul className="mb-5 space-y-4">
             {result.feedback.fixes.map((f, i) => (
               <li key={i}>
                 <div className="text-sm">{f.text}</div>
                 <Quote evidence={f.evidence} />
-                <div className="mt-1 rounded-md bg-background px-3 py-2 text-sm">
-                  <span className="text-muted">Better line: </span>
+                <div className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                  <div className="mb-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-muted">Better line</div>
                   {f.betterLine}
                 </div>
               </li>
             ))}
           </ul>
-          <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Tomorrow&apos;s one thing</h3>
-          <p className="text-sm">{result.feedback.tomorrow}</p>
+          <div className="rounded-lg border border-brand/30 bg-brand/5 px-3.5 py-3">
+            <div className="mb-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-brand">Tomorrow&apos;s one thing</div>
+            <p className="text-sm">{result.feedback.tomorrow}</p>
+          </div>
         </Card>
 
         <Card title="Measured from the recording">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            <Measure label="Length" value={formatDuration(call.durationSec)} />
-            <Measure label="Client talk time" value={call.metrics ? formatPct(call.metrics.clientShare) : "–"} />
-            <Measure label="Silences over 8 s" value={String(call.metrics?.silencesOver8s ?? "–")} />
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <Measure
+              label="Length"
+              value={formatDuration(call.durationSec)}
+              note={call.stream === "first_call" ? "6 to 10 minutes is the aim" : undefined}
+              bar={call.stream === "first_call" ? { value: Math.min(1, call.durationSec / 900), marks: [6 / 15, 10 / 15] } : undefined}
+            />
+            <Measure
+              label="Client talk time"
+              value={call.metrics ? formatPct(call.metrics.clientShare) : "–"}
+              note="half or more is the aim"
+              bar={call.metrics ? { value: call.metrics.clientShare, marks: [0.5] } : undefined}
+            />
+            <Measure
+              label="Silences over 8 s"
+              value={
+                call.metrics ? (
+                  call.metrics.silencesOver8s ? (
+                    <StatusLabel band="red">{call.metrics.silencesOver8s}</StatusLabel>
+                  ) : (
+                    <span className="text-good-ink">0</span>
+                  )
+                ) : (
+                  "–"
+                )
+              }
+              note="none is the aim"
+            />
             <Measure label="Longest silence" value={call.metrics ? `${call.metrics.longestSilenceSec} s` : "–"} />
             {call.stream === "vision_call" && call.metrics && (
               <>
@@ -260,10 +311,15 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
                       </StatusLabel>
                     )}
                   </span>
-                  <span>
-                    {q.number}. {q.question}
-                    {q.priority === "good_to_have" && <span className="text-muted"> (good to have)</span>}
-                    {q.runningBusinessOnly && <span className="text-muted"> (RB only)</span>}
+                  <span className="flex min-w-0 gap-2">
+                    <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[0.65rem] font-semibold tabular-nums text-background">
+                      {q.number}
+                    </span>
+                    <span>
+                      {q.question}
+                      {q.priority === "good_to_have" && <span className="text-muted"> (good to have)</span>}
+                      {q.runningBusinessOnly && <span className="text-muted"> (RB only)</span>}
+                    </span>
                   </span>
                 </li>
               );
@@ -271,7 +327,15 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
           </ul>
         </Card>
 
-        <Card title="Captured for the lead">
+        <Card>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Captured for the lead</h2>
+            {call.leadId && (
+              <Link href={`/leads/${call.leadId}`} className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-background">
+                Open the lead <span aria-hidden="true">→</span>
+              </Link>
+            )}
+          </div>
           <dl className="space-y-2 text-sm">
             {captureRows(result).map(([label, value]) => (
               <div key={label} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
@@ -286,11 +350,21 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
   );
 }
 
-function Measure({ label, value }: { label: string; value: string }) {
+/** A measurement as a small tile: the figure, what to aim for, and an optional bar with target marks. */
+function Measure({ label, value, note, bar }: { label: string; value: ReactNode; note?: string; bar?: { value: number; marks: number[] } }) {
   return (
-    <div>
+    <div className="rounded-lg border border-border p-3">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
+      <dd className="mt-0.5 text-lg font-semibold tabular-nums">{value}</dd>
+      {bar && (
+        <span className="relative mt-2 block h-1 overflow-hidden rounded-full bg-border" aria-hidden="true">
+          <span className="absolute inset-y-0 left-0 rounded-full bg-chart-muted" style={{ width: `${Math.max(0, Math.min(1, bar.value)) * 100}%` }} />
+          {bar.marks.map((m) => (
+            <span key={m} className="absolute inset-y-0 w-0.5 bg-surface" style={{ left: `${m * 100}%` }} />
+          ))}
+        </span>
+      )}
+      {note && <div className="mt-1 text-[0.7rem] text-muted">{note}</div>}
     </div>
   );
 }
