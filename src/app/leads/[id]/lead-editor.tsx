@@ -76,8 +76,8 @@ export function LeadEditor({
         <button type="submit" disabled={pending} className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60">
           {pending ? "Saving…" : "Save"}
         </button>
-        {state.error && <span className="text-sm text-critical">{state.error}</span>}
-        {state.done && <span className="text-sm text-good">{state.done}</span>}
+        {state.error && <span className="text-sm text-critical-ink">{state.error}</span>}
+        {state.done && <span className="text-sm font-medium text-good-ink">✓ {state.done}</span>}
       </div>
     </form>
   );
