@@ -26,6 +26,8 @@ export async function readWebhook(
 ): Promise<{ error: Response } | { payload: unknown }> {
   if (!expectedSecret) return { error: Response.json({ error: "Webhook secret not configured" }, { status: 503 }) };
   if (!secretMatches(presentedWebhookSecret(request), expectedSecret)) {
+    // Visible in the logs, so a mistyped ?secret= in a webhook setting is found on its first event.
+    console.warn(`webhook ${new URL(request.url).pathname}: refused, wrong or missing secret`);
     return { error: Response.json({ error: "Unauthorised" }, { status: 401 }) };
   }
   const payload: unknown = await request.json().catch(() => undefined);
