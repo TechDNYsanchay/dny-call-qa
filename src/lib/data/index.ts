@@ -785,3 +785,11 @@ export const teamNames = cache(async (): Promise<Map<string, string>> => {
   if (error) fail("team names", error);
   return new Map(data.map((p) => [p.id, p.full_name]));
 });
+
+/** The moments pinned from one call, earliest first (readable by everyone signed in). */
+export async function listCallExamples(callId: string): Promise<{ questionId: string; startSec: number; quote: string }[]> {
+  if (!UUID.test(callId)) return [];
+  const { data, error } = await (await supabaseUser()).from("call_examples").select("question_id, start_sec, quote").eq("call_id", callId).order("start_sec");
+  if (error) fail("call examples", error);
+  return data.map((r) => ({ questionId: r.question_id, startSec: Number(r.start_sec), quote: r.quote }));
+}
