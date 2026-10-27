@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isPublicPath } from "@/lib/auth-paths";
+import { retryingFetch } from "@/lib/supabase/retry-fetch";
 
 // Runs before every page: refreshes the Supabase session cookie and sends anyone who is not
 // signed in to /login. Session refresh must happen here; pages cannot write cookies.
@@ -11,6 +12,7 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      global: { fetch: retryingFetch },
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet, headers) => {

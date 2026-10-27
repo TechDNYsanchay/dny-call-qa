@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { io } from "next/cache";
 import { cookies } from "next/headers";
 import type { Database } from "./database.types";
+import { retryingFetch } from "./retry-fetch";
 
 function env(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | "SUPABASE_SECRET_KEY"): string {
   const value = process.env[name];
@@ -21,6 +22,7 @@ export async function supabaseUser() {
   // including per-user prefetches that have cookies; during a real request it resolves at once.
   await io();
   return createServerClient<Database>(env("NEXT_PUBLIC_SUPABASE_URL"), env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"), {
+    global: { fetch: retryingFetch },
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (cookiesToSet) => {
@@ -41,5 +43,6 @@ export async function supabaseUser() {
 export function supabaseAdmin() {
   return createClient<Database>(env("NEXT_PUBLIC_SUPABASE_URL"), env("SUPABASE_SECRET_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: retryingFetch },
   });
 }

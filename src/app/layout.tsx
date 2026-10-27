@@ -1,21 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { AppNav, LogoMark, type NavGroup } from "@/components/app-nav";
-import { getCurrentPerson, getReportDay, isSampleData } from "@/lib/data";
+import { getCurrentPerson, getReportDay, isSampleData, type Me } from "@/lib/data";
 import { formatDay } from "@/lib/format";
+import { fontClasses } from "./fonts";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "DNY Sales Agent",
@@ -37,7 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // suppressHydrationWarning: browser extensions (e.g. QuillBot) add attributes to <html> before
     // React loads. This only ignores attribute differences on this one tag, not its children.
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${fontClasses} h-full antialiased`} suppressHydrationWarning>
       <body className="flex min-h-full flex-col">
         <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur-md print:static">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-x-5 px-4">
@@ -58,9 +49,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 
 /** Navigation for the signed-in person, most-used pages first; empty on the login page. */
 async function SignedInNav() {
-  const me = await getCurrentPerson();
+  let me: Me | null;
+  try {
+    me = await getCurrentPerson();
+  } catch (error) {
+    unstable_rethrow(error);
+    // The database didn't answer: the header keeps just the logo, and the page shows the error.
+    return null;
+  }
   if (!me) return null;
-  const [day, sample] = await Promise.all([getReportDay(), isSampleData()]);
+  // The latest-day note is a nicety; the menu still shows without it.
+  const [day, sample] = await Promise.all([getReportDay(), isSampleData()]).catch((error: unknown) => {
+    unstable_rethrow(error);
+    return [null, false] as const;
+  });
   const coaching: NavGroup = {
     title: "Coaching",
     items: [
