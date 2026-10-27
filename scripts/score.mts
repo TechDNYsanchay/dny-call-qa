@@ -7,7 +7,8 @@
 //                                                 check the result, save score, metrics and lead fields
 //                                                 (--dry-run: check and print the score, save nothing)
 //
-// The result must match CallResultSchema (src/lib/scoring/schema.ts); see scoring/first-call-guide.md.
+// The result must match CallResultSchema (src/lib/scoring/schema.ts); see scoring/first-call-guide.md
+// and scoring/vision-call-guide.md.
 
 import { readFileSync } from "node:fs";
 import { checkAndSave, nextReadyCallId, scoringPackage, skipCall, type Db } from "../src/lib/scoring/pipeline";

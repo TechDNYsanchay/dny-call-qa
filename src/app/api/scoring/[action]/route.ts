@@ -8,8 +8,8 @@ import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
 // The nightly scoring routine (a Claude Code routine on DNY's Claude Max plan) works only
 // through these endpoints, with SCORING_TOKEN as a Bearer token. It never holds database keys.
 //
-//   GET  /api/scoring/guide                          the scoring guide (markdown)
-//   GET  /api/scoring/next[?exclude=id,id]           { done: true } or the next first call to score
+//   GET  /api/scoring/guide[?stream=vision_call]     the scoring guide (markdown): first calls, or vision calls
+//   GET  /api/scoring/next[?exclude=id,id]           { done: true } or the next call to score (call.stream says which)
 //   POST /api/scoring/save?callId=<id>[&dryRun=1]    body: the result JSON -> checked, then saved
 //   POST /api/scoring/skip?callId=<id>               marked "Not a sales call"
 export const maxDuration = 60;
@@ -23,7 +23,9 @@ export async function GET(request: Request, ctx: RouteContext<"/api/scoring/[act
   const { action } = await ctx.params;
 
   if (action === "guide") {
-    const guide = await readFile(path.join(process.cwd(), "scoring", "first-call-guide.md"), "utf8");
+    const stream = new URL(request.url).searchParams.get("stream");
+    const file = stream === "vision_call" ? "vision-call-guide.md" : "first-call-guide.md";
+    const guide = await readFile(path.join(process.cwd(), "scoring", file), "utf8");
     return new Response(guide, { headers: { "content-type": "text/markdown; charset=utf-8" } });
   }
   if (action === "next") {

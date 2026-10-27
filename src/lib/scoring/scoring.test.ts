@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { band, callScore, dayAverage, finaliseScore, scoringEligibility, type Level } from "./compute";
-import { computeMetrics, silences, type Segment } from "./metrics";
+import { applyTopics, computeMetrics, silences, type Segment } from "./metrics";
 import {
   FIRST_CALL_AREAS,
   FIRST_CALL_HARD_FAILS,
@@ -15,6 +15,7 @@ import {
   VisionCallResultSchema,
 } from "./schema";
 import { expectedQuestions } from "./call-sheets";
+import { CALLS } from "@/lib/data/sample-data";
 
 const all = (areas: readonly { id: string }[], level: Level) =>
   Object.fromEntries(areas.map((a) => [a.id, level])) as Record<string, Level>;
@@ -122,6 +123,75 @@ describe("rules measured in code", () => {
       metrics({ clientShare: 0.2 }),
     );
     expect(result.hardFails).toEqual(["client_talk_under_35"]);
+  });
+});
+
+describe("vision call limits measured in code (brief section 4)", () => {
+  const tens = all(VISION_CALL_AREAS, 10);
+
+  it("keeps Value over pitch at 10 within the talk limits", () => {
+    const result = finaliseScore("vision_call", { levels: tens, hardFails: [] }, metrics({ agentShareFirstHalf: 0.4, agentShareOverall: 0.5, serviceShareOfAgent: 0.15 }));
+    expect(result.levels.value_over_pitch).toBe(10);
+    expect(result.overrides).toEqual([]);
+  });
+
+  it("caps Value over pitch at 5 when the consultant talks too much or services take over", () => {
+    for (const over of [{ agentShareFirstHalf: 0.5 }, { agentShareOverall: 0.6 }, { serviceShareOfAgent: 0.25 }]) {
+      const result = finaliseScore("vision_call", { levels: tens, hardFails: [] }, metrics(over));
+      expect(result.levels.value_over_pitch).toBe(5);
+      expect(result.overrides.join(" ")).toMatch(/Value over pitch set to 5/);
+    }
+  });
+
+  it("caps Relationship first at 5 when DNY's credentials take over 2 minutes", () => {
+    const result = finaliseScore("vision_call", { levels: tens, hardFails: [] }, metrics({ credentialsSec: 150 }));
+    expect(result.levels.relationship_first).toBe(5);
+    expect(result.overrides.join(" ")).toContain("2.5 minutes");
+  });
+
+  it("never raises a level, and leaves first calls alone", () => {
+    const zeros = finaliseScore("vision_call", { levels: all(VISION_CALL_AREAS, 0), hardFails: [] }, metrics({ agentShareOverall: 0.9, credentialsSec: 600 }));
+    expect(zeros.levels.value_over_pitch).toBe(0);
+    expect(zeros.levels.relationship_first).toBe(0);
+    const firstCall = finaliseScore("first_call", { levels: all(FIRST_CALL_AREAS, 10), hardFails: [] }, metrics({ agentShareOverall: 0.9 }));
+    expect(firstCall.overrides).toEqual([]);
+  });
+});
+
+describe("vision call topic tags", () => {
+  const segments: Segment[] = [
+    { role: "agent", startSec: 10, endSec: 70, text: "We are DNY, 550+ brands." },
+    { role: "client", startSec: 70, endSec: 300, text: "Mera plan hai ek cafe." },
+    { role: "agent", startSec: 300, endSec: 360, text: "Menu engineering se food cost 28% pe aayega." },
+    { role: "agent", startSec: 400, endSec: 420, text: "Theek hai, Thursday ko proposal." },
+  ];
+
+  it("gives each segment the topic of the stretch it starts in", () => {
+    const tagged = applyTopics(segments, [
+      { from: "0:00", to: "1:10", topic: "dny_credentials" },
+      { from: "1:10", to: "5:00", topic: "client_story" },
+      { from: "5:00", to: "6:30", topic: "services" },
+    ]);
+    expect(tagged.map((s) => s.topic)).toEqual(["dny_credentials", "client_story", "services", undefined]);
+    const m = computeMetrics(tagged, 420);
+    expect(m.credentialsSec).toBe(60);
+    expect(m.serviceShareOfAgent).toBeCloseTo(60 / 140);
+  });
+});
+
+describe("vision call results", () => {
+  const sample = CALLS.find((c) => c.result?.stream === "vision_call")!.result!;
+
+  it("accepts the sample result, with the value topic", () => {
+    expect(VisionCallResultSchema.safeParse(sample).success).toBe(true);
+    const withValue = { ...sample, topics: [{ from: "0:00", to: "9:00", topic: "value" }] };
+    expect(VisionCallResultSchema.safeParse(withValue).success).toBe(true);
+  });
+
+  it("wants the proposal and review dates as YYYY-MM-DD", () => {
+    if (sample.stream !== "vision_call") throw new Error("not a vision call");
+    const vague = { ...sample, capture: { ...sample.capture, proposalDate: "by Thursday" } };
+    expect(VisionCallResultSchema.safeParse(vague).success).toBe(false);
   });
 });
 

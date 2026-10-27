@@ -54,6 +54,13 @@ export function formatClock(iso: string): string {
 }
 
 /** Seconds -> "m:ss" or "h:mm:ss" */
+/** "1:05" or "1:02:05" -> seconds; NaN for anything else. */
+export function secondsFrom(at: string): number {
+  const parts = at.split(":").map(Number);
+  if (parts.length < 2 || parts.length > 3 || parts.some((p) => !Number.isFinite(p))) return NaN;
+  return parts.reduce((total, p) => total * 60 + p, 0);
+}
+
 export function formatTimestamp(totalSec: number): string {
   const s = Math.floor(totalSec % 60);
   const m = Math.floor(totalSec / 60) % 60;

@@ -4,11 +4,11 @@
 // numbers can't drift with the prompt.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatTimestamp, toIst } from "@/lib/format";
+import { formatTimestamp, secondsFrom, toIst } from "@/lib/format";
 import type { Database } from "@/lib/supabase/database.types";
 import type { Stream } from "./call-sheets";
 import { finaliseScore, type Level } from "./compute";
-import { computeMetrics, silences } from "./metrics";
+import { applyTopics, computeMetrics, silences, type SpeakerRole } from "./metrics";
 import { CallResultSchema, speakerLabels } from "./schema";
 import { areasFor, hardFailsFor, RUBRIC_VERSION } from "./scorecards";
 import { activeSheet, expectedFrom } from "./sheets";
@@ -30,7 +30,7 @@ interface CallInfo {
 async function loadCall(db: Db, callId: string) {
   const { data: call, error } = await db
     .from("calls")
-    .select("id, stream, started_at, duration_sec, call_direction, lead_id, transcript_status, scoring_status, people ( full_name, role )")
+    .select("id, stream, started_at, duration_sec, call_direction, lead_id, transcript_status, scoring_status, people!calls_person_id_fkey ( full_name, role )")
     .eq("id", callId)
     .maybeSingle<CallInfo>();
   if (error) throw new Error(`call: ${error.message}`);
@@ -44,12 +44,10 @@ async function loadCall(db: Db, callId: string) {
   return { call, segments: segments.map((s) => ({ ...s, start_sec: Number(s.start_sec), end_sec: Number(s.end_sec) })) };
 }
 
-/**
- * The oldest call ready for scoring, leaving out `exclude` (calls a run has given up on).
- * Only first calls until the vision-call guide exists.
- */
-export async function nextReadyCallId(db: Db, exclude: string[] = [], stream: Stream = "first_call"): Promise<string | null> {
-  let query = db.from("calls").select("id").eq("scoring_status", "ready").eq("stream", stream);
+/** The oldest call ready for scoring (first calls and vision calls alike), leaving out `exclude` (calls a run has given up on). */
+export async function nextReadyCallId(db: Db, exclude: string[] = [], stream?: Stream): Promise<string | null> {
+  let query = db.from("calls").select("id").eq("scoring_status", "ready");
+  if (stream) query = query.eq("stream", stream);
   if (exclude.length) query = query.not("id", "in", `(${exclude.join(",")})`);
   const { data, error } = await query.order("started_at").limit(1);
   if (error) throw new Error(`next call: ${error.message}`);
@@ -69,6 +67,8 @@ export async function scoringPackage(db: Db, callId: string) {
   const gaps = silences(segments.map((s) => ({ role: "unknown" as const, startSec: s.start_sec, endSec: s.end_sec, text: s.text })));
   // The latest published call sheet; its questions are the ones coverage is judged against.
   const sheet = await activeSheet(db, call.stream);
+  // A vision call is judged on building on the first call, not re-asking it (brief section 2).
+  const lead = call.stream === "vision_call" && call.lead_id ? await leadNotes(db, call.lead_id) : null;
 
   return {
     call: {
@@ -78,6 +78,7 @@ export async function scoringPackage(db: Db, callId: string) {
       durationSec: call.duration_sec,
       direction: call.call_direction,
       person: call.people,
+      ...(lead ? { lead } : {}),
     },
     measured: {
       talkSecondsBySpeaker: Object.fromEntries(Object.entries(talk).map(([k, v]) => [k, Math.round(v)])),
@@ -95,8 +96,22 @@ export async function scoringPackage(db: Db, callId: string) {
   };
 }
 
+async function leadNotes(db: Db, leadId: string) {
+  const { data, error } = await db.from("leads").select("name, email, first_call_capture").eq("id", leadId).maybeSingle();
+  if (error) throw new Error(`lead: ${error.message}`);
+  return data && { name: data.name, email: data.email, firstCallNotes: data.first_call_capture };
+}
+
+/** A vision call's measured shares, in whole percent, for the scorer to square its levels with. */
+interface VisionMeasures {
+  consultantSharePct: number;
+  consultantShareFirstHalfPct: number;
+  serviceShareOfConsultantPct: number;
+  credentialsMin: number;
+}
+
 export type SaveOutcome =
-  | { ok: true; saved: boolean; score: number; band: string; hardFails: string[]; clientSharePct: number; summary: string }
+  | { ok: true; saved: boolean; score: number; band: string; hardFails: string[]; clientSharePct: number; vision?: VisionMeasures; summary: string }
   | { ok: false; errors: string[] };
 
 const plain = (text: string) => text.normalize("NFC").toLowerCase().replace(/[\p{P}\p{S}]/gu, " ").replace(/\s+/g, " ").trim();
@@ -117,6 +132,24 @@ export async function checkAndSave(db: Db, callId: string, json: unknown, { dryR
     if (result.capture.vcDate === undefined) errors.push("capture.vcDate is required: the fixed meeting's date as YYYY-MM-DD, or null");
     if (result.capture.callBack === undefined) errors.push("capture.callBack is required: { when, date } if a call-back was promised or asked for, or null");
     if (result.capture.vcDateTime && result.capture.vcDate === null) errors.push("capture.vcDate must be set when vcDateTime is (work out the date from the call date)");
+  }
+  if (result.stream === "vision_call") {
+    // Topic tags: in order, each a real stretch inside the call, so minutes per topic add up.
+    let previousEnd = 0;
+    for (const t of result.topics) {
+      const [from, to] = [secondsFrom(t.from), secondsFrom(t.to)];
+      if (!(to > from)) errors.push(`topics: ${t.from} to ${t.to} must end after it starts`);
+      else if (from < previousEnd) errors.push(`topics: ${t.from} to ${t.to} overlaps the stretch before; list them in order without overlaps`);
+      else if (to > call.duration_sec + 30) errors.push(`topics: ${t.to} is after the end of the call (${formatTimestamp(call.duration_sec)})`);
+      previousEnd = Math.max(previousEnd, to);
+    }
+    if (result.topics.length === 0) errors.push("topics: tag the call's stretches (client_story, value, dny_credentials, services, fees, other)");
+    const known = new Set((await activeSheet(db, call.stream)).questions.map((q) => q.id));
+    const unknown = Object.keys(result.capture.answers).filter((id) => !known.has(id));
+    if (unknown.length) errors.push(`capture.answers has questions that aren't on the sheet: ${unknown.join(", ")}`);
+    if (result.hardFails.some((h) => h.id === "proposal_without_date") && result.capture.proposalDate) {
+      errors.push("A proposal_without_date hard fail can't have a capture.proposalDate; one of them is wrong");
+    }
   }
 
   const labels = new Set(segments.map((s) => s.speaker_label));
@@ -146,20 +179,31 @@ export async function checkAndSave(db: Db, callId: string, json: unknown, { dryR
   }
   if (errors.length) return { ok: false, errors };
 
-  const roleOf = (label: string) => (agentLabels.includes(label) ? "agent" : clientLabels.includes(label) ? "client" : "unknown");
-  const metrics = computeMetrics(
-    segments.map((s) => ({ role: roleOf(s.speaker_label), startSec: s.start_sec, endSec: s.end_sec, text: s.text })),
-    call.duration_sec,
-  );
+  const roleOf = (label: string): SpeakerRole => (agentLabels.includes(label) ? "agent" : clientLabels.includes(label) ? "client" : "unknown");
+  const roled = segments.map((s) => ({ role: roleOf(s.speaker_label), startSec: s.start_sec, endSec: s.end_sec, text: s.text }));
+  const metrics = computeMetrics(result.stream === "vision_call" ? applyTopics(roled, result.topics) : roled, call.duration_sec);
   const levels = Object.fromEntries(Object.entries(result.areas).map(([id, a]) => [id, a.level])) as Record<string, Level>;
   const final = finaliseScore(call.stream, { levels, hardFails: result.hardFails.map((h) => h.id) }, metrics);
   const clientSharePct = Math.round(metrics.clientShare * 100);
+  const vision: VisionMeasures | undefined =
+    call.stream === "vision_call"
+      ? {
+          consultantSharePct: Math.round(metrics.agentShareOverall * 100),
+          consultantShareFirstHalfPct: Math.round(metrics.agentShareFirstHalf * 100),
+          serviceShareOfConsultantPct: Math.round(metrics.serviceShareOfAgent * 100),
+          credentialsMin: Math.round((metrics.credentialsSec / 60) * 10) / 10,
+        }
+      : undefined;
   const summary =
     `${final.score}/100, ${final.band}` +
     (final.hardFails.length ? `, hard fails: ${final.hardFails.join(", ")}` : "") +
     ` · client talked ${clientSharePct}%` +
-    ` · ${Object.entries(final.levels).map(([id, level]) => `${id} ${level}`).join(", ")}`;
-  const outcome = { ok: true as const, score: final.score, band: final.band, hardFails: final.hardFails, clientSharePct, summary };
+    (vision
+      ? ` · consultant ${vision.consultantShareFirstHalfPct}% in the first half, ${vision.consultantSharePct}% overall · services ${vision.serviceShareOfConsultantPct}% of the consultant's talk · credentials ${vision.credentialsMin} min`
+      : "") +
+    ` · ${Object.entries(final.levels).map(([id, level]) => `${id} ${level}`).join(", ")}` +
+    (final.overrides.length ? ` · ${final.overrides.join(" ")}` : "");
+  const outcome = { ok: true as const, score: final.score, band: final.band, hardFails: final.hardFails, clientSharePct, ...(vision ? { vision } : {}), summary };
   if (dryRun) return { ...outcome, saved: false };
 
   for (const label of labels) {

@@ -14,6 +14,11 @@ export const AMBER_FROM = 60;
 export const MIN_SCORED_DURATION_SEC = 120;
 export const FIRST_CALL_MAX_SEC = 15 * 60;
 export const VC_MIN_CLIENT_SHARE = 0.35;
+/** Brief section 4, "Value over pitch" scores 10 only within these; "Relationship first" only with credentials under 2 minutes. */
+export const VC_MAX_CONSULTANT_SHARE_FIRST_HALF = 0.45;
+export const VC_MAX_CONSULTANT_SHARE = 0.55;
+export const VC_MAX_SERVICE_SHARE = 0.2;
+export const VC_MAX_CREDENTIALS_SEC = 120;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -77,6 +82,23 @@ export function finaliseScore(
   if (stream === "first_call" && metrics.durationSec > FIRST_CALL_MAX_SEC && levels.short_precise !== 0) {
     levels.short_precise = 0;
     overrides.push("Short and precise set to 0: the call ran over 15 minutes.");
+  }
+
+  if (stream === "vision_call") {
+    const pct = (share: number) => `${Math.round(share * 100)}%`;
+    const over = [
+      metrics.agentShareFirstHalf > VC_MAX_CONSULTANT_SHARE_FIRST_HALF && `the consultant talked ${pct(metrics.agentShareFirstHalf)} in the first half (45% at most)`,
+      metrics.agentShareOverall > VC_MAX_CONSULTANT_SHARE && `${pct(metrics.agentShareOverall)} overall (55% at most)`,
+      metrics.serviceShareOfAgent > VC_MAX_SERVICE_SHARE && `services took ${pct(metrics.serviceShareOfAgent)} of the consultant's talk (20% at most)`,
+    ].filter(Boolean);
+    if (over.length && levels.value_over_pitch === 10) {
+      levels.value_over_pitch = 5;
+      overrides.push(`Value over pitch set to 5: ${over.join("; ")}.`);
+    }
+    if (metrics.credentialsSec > VC_MAX_CREDENTIALS_SEC && levels.relationship_first === 10) {
+      levels.relationship_first = 5;
+      overrides.push(`Relationship first set to 5: DNY's credentials took ${(metrics.credentialsSec / 60).toFixed(1)} minutes (under 2 is the aim).`);
+    }
   }
 
   if (stream === "vision_call" && metrics.clientShare < VC_MIN_CLIENT_SHARE && !hardFails.includes("client_talk_under_35")) {

@@ -3,7 +3,10 @@
 // reads and the pin/unpin actions are in lib/data and app/examples.
 
 import type { CallRecord } from "@/lib/data/types";
+import { secondsFrom } from "@/lib/format";
 import type { Band } from "@/lib/scoring/compute";
+
+export { secondsFrom };
 
 export interface ExampleCandidate {
   questionId: string;
@@ -20,12 +23,6 @@ export interface ExampleCandidate {
   band: Band;
 }
 
-/** "1:05" or "1:02:05" -> seconds; NaN for anything else. */
-export function secondsFrom(at: string): number {
-  const parts = at.split(":").map(Number);
-  if (parts.length < 2 || parts.length > 3 || parts.some((p) => !Number.isFinite(p))) return NaN;
-  return parts.reduce((total, p) => total * 60 + p, 0);
-}
 
 /**
  * For each question, the covered moments from scored first calls, best call first: the

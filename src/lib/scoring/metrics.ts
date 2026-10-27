@@ -1,10 +1,16 @@
 // Call measurements computed in code from transcript timings (brief sections 3-5).
 // The model is given these as facts; it never estimates them itself.
 
+import { secondsFrom } from "@/lib/format";
+
 export type SpeakerRole = "agent" | "client" | "unknown";
 
-/** Topic tags Claude assigns to each stretch of a VC so code can add up minutes per topic. */
-export type Topic = "client_story" | "dny_credentials" | "services" | "fees" | "other";
+/**
+ * Topic tags Claude assigns to each stretch of a VC so code can add up minutes per topic.
+ * "value" is a case study, benchmark or market observation tied to the client's own concept;
+ * "dny_credentials" is DNY presenting itself.
+ */
+export type Topic = "client_story" | "value" | "dny_credentials" | "services" | "fees" | "other";
 
 export interface Segment {
   role: SpeakerRole;
@@ -53,6 +59,15 @@ export function silences(segments: Segment[]): number[] {
     speechEnd = Math.max(speechEnd, s.endSec);
   }
   return gaps;
+}
+
+/** Gives each segment the topic of the tagged stretch it starts in (VC topic tags use "m:ss"). */
+export function applyTopics<T extends Segment>(segments: T[], topics: { from: string; to: string; topic: Topic }[]): T[] {
+  const ranges = topics.map((t) => ({ from: secondsFrom(t.from), to: secondsFrom(t.to), topic: t.topic }));
+  return segments.map((s) => {
+    const hit = ranges.find((r) => s.startSec >= r.from && s.startSec < r.to);
+    return hit ? { ...s, topic: hit.topic } : s;
+  });
 }
 
 export function computeMetrics(segments: Segment[], durationSec: number): CallMetrics {

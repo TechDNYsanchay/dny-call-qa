@@ -112,8 +112,10 @@ export const VisionCallCaptureSchema = z.object({
   caseStudiesDiscussed: z.array(z.string()),
   /** Each challenge mapped to a Service Master head (H01-H14). */
   challengesToHeads: z.array(z.object({ challenge: z.string(), head: z.string().regex(/^H\d{2}$/) })),
-  proposalDate: z.string().nullable(),
-  reviewCallDate: z.string().nullable(),
+  /** The day the proposal was promised, as YYYY-MM-DD; null when no day was committed. */
+  proposalDate: IsoDateSchema.nullable(),
+  /** The review call's day, as YYYY-MM-DD; null when it wasn't fixed. */
+  reviewCallDate: IsoDateSchema.nullable(),
   founderRoundTwo: z.boolean().nullable(),
   partnerNeeds: z.array(z.enum(["brand", "website", "marketing", "property", "procurement", "handholding"])),
 });
@@ -156,7 +158,7 @@ export const VisionCallResultSchema = z.object({
     z.object({
       from: TimestampSchema,
       to: TimestampSchema,
-      topic: z.enum(["client_story", "dny_credentials", "services", "fees", "other"]),
+      topic: z.enum(["client_story", "value", "dny_credentials", "services", "fees", "other"]),
     }),
   ),
   hardFails: z.array(hardFailItem(VISION_CALL_JUDGED_HARD_FAILS)),

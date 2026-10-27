@@ -1,5 +1,6 @@
 // Turns a call's capture fields into label/value rows for the call page and the lead page.
 
+import { formatDay } from "@/lib/format";
 import { VISION_CALL_QUESTIONS } from "@/lib/scoring/call-sheets";
 import type { CallResult, FirstCallResult, VisionCallResult } from "@/lib/scoring/schema";
 
@@ -80,8 +81,8 @@ function visionCallRows(c: VisionCallResult["capture"]): CaptureRow[] {
     ["Package suggestion", c.packageSuggestion],
     ["Case studies discussed", c.caseStudiesDiscussed.join(", ") || null],
     ["Challenges mapped to heads", c.challengesToHeads.map((x) => `${x.challenge} → ${x.head}`).join("; ") || null],
-    ["Proposal date", c.proposalDate],
-    ["Review call date", c.reviewCallDate],
+    ["Proposal date", c.proposalDate && formatDay(c.proposalDate)],
+    ["Review call date", c.reviewCallDate && formatDay(c.reviewCallDate)],
     ["Founder round two", c.founderRoundTwo === null ? null : c.founderRoundTwo ? "Yes" : "No"],
     ["Partner needs raised", c.partnerNeeds.map(words).join(", ") || null],
   ];
