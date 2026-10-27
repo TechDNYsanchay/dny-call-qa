@@ -228,3 +228,27 @@ export function TrendSparkline({ values, labels, band }: { values: (number | nul
     </svg>
   );
 }
+
+/**
+ * Hot, warm or cold without status colours (those mean good and bad elsewhere): a filled pill for
+ * hot, an outlined one for warm, plain text for cold.
+ */
+export function QualityPill({ quality }: { quality: "hot" | "warm" | "cold" }) {
+  if (quality === "cold") return <span className="text-xs text-muted">Cold</span>;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${quality === "hot" ? "bg-foreground text-background" : "border border-border text-foreground"}`}
+    >
+      {quality === "hot" ? "Hot" : "Warm"}
+    </span>
+  );
+}
+
+export function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="mt-0.5 size-3.5 shrink-0 text-muted" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}

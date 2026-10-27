@@ -85,6 +85,7 @@ export interface LeadFollowUp {
   leadId: string;
   name: string;
   city: string | null;
+  phone?: string;
   personId: string;
   /** The scored call it comes from. */
   callId: string;
@@ -140,6 +141,7 @@ export function leadFollowUps(calls: CallRecord[], today: string): LeadFollowUp[
       leadId,
       name: capture.clientName ?? source.client.name,
       city: capture.city,
+      phone: source.clientPhone,
       personId: source.personId,
       callId: source.id,
       quality: capture.leadQuality,
