@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { FunnelChart } from "@/components/funnel";
-import { BandBadge, Card, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
-import { getActiveSheets, getReportDay, listCallsBetween, listPeople, requireMe } from "@/lib/data";
+import { Avatar, Card, EmptyState, Loading, PageHeader, ScoreFigure, StatTile, StatusLabel, TrendSparkline } from "@/components/ui";
+import { getActiveSheets, getReportDay, listCallsBetween, listPeople, requireMe, type CallRecord } from "@/lib/data";
 import { formatClock, formatDay } from "@/lib/format";
 import { daysOf, monthPeriod, rollup, weekPeriod, type Period } from "@/lib/rollups";
 
@@ -23,13 +23,26 @@ function periodFrom(query: { week?: string | string[]; month?: string | string[]
 }
 
 /** "▲ 4.5" / "▼ 3" against the previous period: an arrow and a sign, never colour alone. */
-function Change({ value, against }: { value: number | null; against: string }) {
+function Change({ value }: { value: number | null }) {
   if (value === null) return <span className="text-muted">–</span>;
-  if (value === 0) return <span className="text-muted">no change vs {against}</span>;
+  if (value === 0) return <span className="text-muted">No change</span>;
   return (
-    <span className={value > 0 ? "text-good" : "text-critical"}>
-      {value > 0 ? "▲" : "▼"} {Math.abs(value)} <span className="text-muted">vs {against}</span>
+    <span className={`font-semibold tabular-nums ${value > 0 ? "text-good-ink" : "text-critical-ink"}`}>
+      {value > 0 ? "▲" : "▼"} {Math.abs(value)}
     </span>
+  );
+}
+
+/** "Best · 23 Oct 14:41 · 72.5" with the score in its band's colour. */
+function CallLink({ label, call }: { label: string; call: CallRecord }) {
+  return (
+    <Link href={`/calls/${call.id}`} className="flex items-center gap-1.5 whitespace-nowrap hover:underline">
+      <span className="w-14 text-muted">{label}</span>
+      <span>
+        {formatDay(call.startedAt).replace(/ \d{4}$/, "")} {formatClock(call.startedAt)}
+      </span>
+      <StatusLabel band={call.final!.band}>{call.final!.score}</StatusLabel>
+    </Link>
   );
 }
 
@@ -81,68 +94,92 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
         </div>
       </PageHeader>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* Five tiles: on two columns the last one spans the row instead of sitting alone. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
         <StatTile
           label={me.canSeeAll ? "Team average" : "My average"}
-          value={r.average === null || !r.band ? "–" : <BandBadge score={r.average} band={r.band} />}
-          note={undefined}
+          value={r.average === null || !r.band ? <span className="text-muted">–</span> : <ScoreFigure score={r.average} band={r.band} />}
         />
-        <StatTile label={`Change vs ${period.previous.label}`} value={<Change value={r.change} against={period.previous.label} />} />
+        <StatTile
+          label={`Change vs ${period.previous.label}`}
+          value={<Change value={r.change} />}
+          note={r.previousAverage === null ? `nothing scored ${period.previous.label}` : `${period.previous.label}: ${r.previousAverage}`}
+        />
         <StatTile label="Calls scored" value={r.scored} note={`of ${r.calls} logged`} />
-        <StatTile label="Hard-fail calls" value={r.hardFailCalls} note={r.hardFails[0] ? `most often: ${r.hardFails[0].label.toLowerCase()}` : "none"} />
+        <StatTile
+          label="Hard-fail calls"
+          value={r.hardFailCalls ? <StatusLabel band="red">{r.hardFailCalls}</StatusLabel> : <span className="text-good-ink">0</span>}
+          note={r.hardFails[0] ? `most often: ${r.hardFails[0].label.toLowerCase()}` : "none"}
+        />
         <StatTile label="VCs booked" value={r.vcsBooked} note={`from ${r.firstCallsScored} scored first calls`} />
       </div>
 
       <Card title={me.canSeeAll ? "Leaderboard" : "My calls"} className="mb-6">
         <div className="-mx-4 overflow-x-auto sm:-mx-5">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="text-left text-xs text-muted">
               <tr className="border-b border-border">
                 <th className="px-4 py-2 font-medium sm:px-5">Person</th>
-                <th className="px-2 py-2 text-right font-medium">Scored</th>
                 <th className="px-2 py-2 font-medium">Average</th>
                 <th className="px-2 py-2 font-medium">vs {period.previous.label}</th>
+                <th className="px-2 py-2 text-right font-medium">Scored</th>
                 <th className="px-2 py-2 text-right font-medium">Hard fails</th>
                 <th className="px-2 py-2 text-right font-medium">VCs booked</th>
-                <th className="px-2 py-2 text-right font-medium">Client talk</th>
+                <th className="px-2 py-2 font-medium">Client talk</th>
                 <th className="px-2 py-2 font-medium">Daily trend</th>
                 <th className="px-4 py-2 font-medium sm:px-5">Best · weakest call</th>
               </tr>
             </thead>
             <tbody>
-              {r.people.map((p) => (
-                <tr key={p.person.id} className="border-b border-border align-top last:border-0">
-                  <td className="px-4 py-3 sm:px-5">
-                    <div className="font-medium">{p.person.name}</div>
-                    <div className="text-xs text-muted">{p.person.title}</div>
+              {r.people.map((p, rank) => (
+                <tr key={p.person.id} className="border-b border-border align-middle transition-colors last:border-0 hover:bg-background/60">
+                  <td className="px-4 py-3.5 sm:px-5">
+                    <div className="flex items-center gap-3">
+                      {me.canSeeAll && <span className="w-4 text-right text-xs tabular-nums text-muted">{rank + 1}</span>}
+                      <Avatar name={p.person.name} />
+                      <div className="min-w-0">
+                        <div className="font-medium">{p.person.name}</div>
+                        <div className="text-xs text-muted">{p.person.title}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-2 py-3 text-right tabular-nums">
-                    {p.scored}/{p.calls}
+                  <td className="px-2 py-3.5">
+                    {p.average !== null && p.band ? <ScoreFigure score={p.average} band={p.band} size="md" /> : <span className="text-xs text-muted">Nothing scored</span>}
                   </td>
-                  <td className="px-2 py-3">{p.average !== null && p.band ? <BandBadge score={p.average} band={p.band} /> : <span className="text-muted">–</span>}</td>
-                  <td className="px-2 py-3 text-xs">
-                    <Change value={p.change} against={period.previous.label} />
+                  <td className="px-2 py-3.5 text-xs">
+                    <Change value={p.change} />
                   </td>
-                  <td className="px-2 py-3 text-right tabular-nums">{p.hardFailCalls}</td>
-                  <td className="px-2 py-3 text-right tabular-nums">
-                    {p.vcsBooked}
-                    <span className="text-muted">/{p.firstCallsScored}</span>
+                  <td className="px-2 py-3.5 text-right tabular-nums">
+                    <span className="font-medium">{p.scored}</span>
+                    <span className="text-muted"> / {p.calls}</span>
                   </td>
-                  <td className="px-2 py-3 text-right tabular-nums">{p.avgClientSharePct === null ? "–" : `${p.avgClientSharePct}%`}</td>
-                  <td className="px-2 py-3">
-                    <TrendSparkline values={p.daily} labels={dayLabels} />
+                  <td className="px-2 py-3.5 text-right tabular-nums">
+                    {p.hardFailCalls ? <StatusLabel band="red">{p.hardFailCalls}</StatusLabel> : <span className="text-muted">0</span>}
                   </td>
-                  <td className="space-y-1 px-4 py-3 text-xs sm:px-5">
-                    {p.best && (
-                      <Link href={`/calls/${p.best.id}`} className="block hover:underline">
-                        Best: {formatDay(p.best.startedAt).replace(/ \d{4}$/, "")} {formatClock(p.best.startedAt)} · {p.best.final!.score}
-                      </Link>
+                  <td className="px-2 py-3.5 text-right tabular-nums">
+                    <span className="font-medium">{p.vcsBooked}</span>
+                    <span className="text-muted"> / {p.firstCallsScored}</span>
+                  </td>
+                  <td className="px-2 py-3.5">
+                    {p.avgClientSharePct === null ? (
+                      <span className="text-muted">–</span>
+                    ) : (
+                      // How much the clients talked: the brief wants half or more.
+                      <span className="inline-flex flex-col gap-1.5" title="Share of the call the client talked; half or more is the aim">
+                        <span className="tabular-nums">{p.avgClientSharePct}%</span>
+                        <span className="relative block h-1 w-16 overflow-hidden rounded-full bg-border">
+                          <span className="absolute inset-y-0 left-0 rounded-full bg-chart-muted" style={{ width: `${p.avgClientSharePct}%` }} />
+                          <span className="absolute inset-y-0 left-1/2 w-0.5 bg-surface" />
+                        </span>
+                      </span>
                     )}
-                    {p.worst && (
-                      <Link href={`/calls/${p.worst.id}`} className="block text-muted hover:underline">
-                        Weakest: {formatDay(p.worst.startedAt).replace(/ \d{4}$/, "")} {formatClock(p.worst.startedAt)} · {p.worst.final!.score}
-                      </Link>
-                    )}
+                  </td>
+                  <td className="px-2 py-3.5">
+                    {p.daily.some((v) => v !== null) ? <TrendSparkline values={p.daily} labels={dayLabels} band={p.band} /> : <span className="text-muted">–</span>}
+                  </td>
+                  <td className="space-y-1 px-4 py-3.5 text-xs sm:px-5">
+                    {p.best && <CallLink label="Best" call={p.best} />}
+                    {p.worst && <CallLink label="Weakest" call={p.worst} />}
                   </td>
                 </tr>
               ))}
@@ -158,33 +195,50 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
         </div>
       </Card>
 
-      <Card title={me.canSeeAll ? "Lead funnel" : "My lead funnel"} className="mb-6">
-        <FunnelChart funnel={r.funnel} />
-      </Card>
+      <div className="mb-6 grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Card title={me.canSeeAll ? "Lead funnel" : "My lead funnel"}>
+          <FunnelChart funnel={r.funnel} />
+        </Card>
 
-      <Card title={me.canSeeAll ? `Call of the ${period.kind}` : `My best call this ${period.kind}`} className="mb-6">
-        {r.callOfPeriod ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <Link href={`/calls/${r.callOfPeriod.id}`} className="hover:underline">
-              <span className="font-medium">{people.find((p) => p.id === r.callOfPeriod!.personId)?.name ?? "Unknown"}</span> with {r.callOfPeriod.client.name} ·{" "}
-              {formatDay(r.callOfPeriod.startedAt).replace(/ \d{4}$/, "")}, {formatClock(r.callOfPeriod.startedAt)}
-            </Link>
-            <BandBadge score={r.callOfPeriod.final!.score} band={r.callOfPeriod.final!.band} />
-          </div>
-        ) : (
-          <p className="text-sm text-muted">No call scored Amber or Green in this {period.kind}.</p>
-        )}
-        {me.canSeeAll && <p className="mt-2 text-xs text-muted">The highest-scoring call that isn&apos;t Red. The whole team can listen to it from the Examples page and the {period.kind}ly email.</p>}
-      </Card>
+        <Card title={me.canSeeAll ? `Call of the ${period.kind}` : `My best call this ${period.kind}`}>
+          {r.callOfPeriod ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={people.find((p) => p.id === r.callOfPeriod!.personId)?.name ?? ""} />
+                <div className="min-w-0 text-sm">
+                  <div className="font-medium">{people.find((p) => p.id === r.callOfPeriod!.personId)?.name ?? "Unknown"}</div>
+                  <div className="truncate text-xs text-muted" title={r.callOfPeriod.client.name}>
+                    with {r.callOfPeriod.client.name} · {formatDay(r.callOfPeriod.startedAt).replace(/ \d{4}$/, "")}, {formatClock(r.callOfPeriod.startedAt)}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <ScoreFigure score={r.callOfPeriod.final!.score} band={r.callOfPeriod.final!.band} />
+                <Link
+                  href={`/calls/${r.callOfPeriod.id}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-background"
+                >
+                  Listen to the call <span aria-hidden="true">→</span>
+                </Link>
+              </div>
+              {me.canSeeAll && <p className="text-xs text-muted">The highest-scoring call that isn&apos;t Red. The whole team can hear it from the Examples page and the {period.kind}ly email.</p>}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">No call scored Amber or Green in this {period.kind}.</p>
+          )}
+        </Card>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Hard fails by type">
           {r.hardFails.length ? (
-            <ul className="space-y-1 text-sm">
+            <ul className="divide-y divide-border text-sm">
               {r.hardFails.map((h) => (
-                <li key={h.id} className="flex justify-between gap-3">
-                  <span>{h.label}</span>
-                  <span className="tabular-nums text-muted">×{h.count}</span>
+                <li key={h.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                  <StatusLabel band="red">
+                    <span className="font-normal text-foreground">{h.label}</span>
+                  </StatusLabel>
+                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs tabular-nums text-muted">×{h.count}</span>
                 </li>
               ))}
             </ul>
@@ -194,11 +248,18 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
         </Card>
         <Card title="Mandatory questions skipped most">
           {r.missed.length ? (
-            <ul className="space-y-1 text-sm">
+            <ul className="space-y-3 text-sm">
               {r.missed.map((m) => (
-                <li key={m.id} className="flex justify-between gap-3">
-                  <span>{m.question}</span>
-                  <span className="shrink-0 tabular-nums text-muted">{m.count} call{m.count === 1 ? "" : "s"}</span>
+                <li key={m.id}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span>{m.question}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted">
+                      {m.count} of {r.scored} call{r.scored === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-border" aria-hidden="true">
+                    <span className="block h-full rounded-full bg-chart-muted" style={{ width: `${r.scored ? Math.min(100, (m.count / r.scored) * 100) : 0}%` }} />
+                  </span>
                 </li>
               ))}
             </ul>

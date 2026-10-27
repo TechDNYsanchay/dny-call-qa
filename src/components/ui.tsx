@@ -222,7 +222,8 @@ export function TrendSparkline({ values, labels, band }: { values: (number | nul
           <circle cx={x(p.i)} cy={y(p.v)} r="7" fill="transparent">
             <title>{`${dayLabel(p.i)}: ${p.v}`}</title>
           </circle>
-          {p.i === today && <circle cx={x(p.i)} cy={y(p.v)} r="3.5" className={`${band ? BAND_STYLE[band].fill : "fill-foreground"} stroke-surface`} strokeWidth="2" />}
+          {/* The latest point, so even a single day shows. */}
+          {p.i === points[points.length - 1].i && <circle cx={x(p.i)} cy={y(p.v)} r="3.5" className={`${band ? BAND_STYLE[band].fill : "fill-foreground"} stroke-surface`} strokeWidth="2" />}
         </g>
       ))}
     </svg>
