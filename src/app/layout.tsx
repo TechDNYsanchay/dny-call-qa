@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
-import { InstallApp } from "@/components/install-app";
+import { AppNav, LogoMark, type NavGroup } from "@/components/app-nav";
 import { getCurrentPerson, getReportDay, isSampleData } from "@/lib/data";
 import { formatDay } from "@/lib/format";
 import "./globals.css";
@@ -39,10 +39,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // React loads. This only ignores attribute differences on this one tag, not its children.
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="flex min-h-full flex-col">
-        <header className="border-b border-border bg-surface">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
-              <span className="grid size-7 place-items-center rounded-md bg-brand text-xs font-bold text-white">DNY</span>
+        <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur-md print:static">
+          <div className="mx-auto flex h-14 max-w-6xl items-center gap-x-5 px-4">
+            <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
+              <LogoMark />
               Sales Agent
             </Link>
             <Suspense fallback={null}>
@@ -56,67 +56,52 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   );
 }
 
-/** Navigation for the signed-in person; empty on the login page. */
+/** Navigation for the signed-in person, most-used pages first; empty on the login page. */
 async function SignedInNav() {
   const me = await getCurrentPerson();
   if (!me) return null;
   const [day, sample] = await Promise.all([getReportDay(), isSampleData()]);
-  const links = me.canSeeAll
+  const coaching: NavGroup = {
+    title: "Coaching",
+    items: [
+      { href: "/examples", label: "Examples", icon: "examples", hint: "The best calls to learn from" },
+      { href: "/scorecards", label: "Scorecards", icon: "scorecards", hint: "What every call is scored on" },
+    ],
+  };
+  const groups: NavGroup[] = me.canSeeAll
     ? [
-        { href: "/", label: "Team" },
-        { href: "/calls", label: "Calls" },
-        { href: "/leads", label: "Leads" },
-        { href: "/follow-ups", label: "Follow-ups" },
-        { href: "/rollups", label: "Roll-ups" },
-        { href: "/examples", label: "Examples" },
-        { href: "/sheets", label: "Call sheets" },
-        { href: "/team-members", label: "Team members" },
-        { href: "/scorecards", label: "Scorecards" },
+        {
+          title: "Daily",
+          items: [
+            { href: "/", label: "Team", icon: "team", hint: "Everyone's scores for the day", also: ["/people"] },
+            { href: "/follow-ups", label: "Follow-ups", icon: "followups", hint: "Missed calls and meetings to book" },
+            { href: "/calls", label: "Calls", icon: "calls", hint: "Every call, with its score" },
+            { href: "/leads", label: "Leads", icon: "leads", hint: "Clients and where each one is" },
+            { href: "/rollups", label: "Roll-ups", icon: "rollups", hint: "Weekly and monthly trends" },
+          ],
+        },
+        coaching,
+        {
+          title: "Setup",
+          items: [
+            { href: "/team-members", label: "Team members", icon: "members", hint: "Who is scored and who gets reports" },
+            { href: "/sheets", label: "Call sheets", icon: "sheets", hint: "Questions each call should cover" },
+          ],
+        },
       ]
     : [
-        { href: `/people/${me.id}`, label: "My report" },
-        { href: "/calls", label: "My calls" },
-        { href: "/leads", label: "My leads" },
-        { href: "/follow-ups", label: "My follow-ups" },
-        { href: "/rollups", label: "My week" },
-        { href: "/examples", label: "Examples" },
-        { href: "/scorecards", label: "Scorecards" },
+        {
+          title: "Daily",
+          items: [
+            { href: `/people/${me.id}`, label: "My report", icon: "report", hint: "Your scores and what to work on" },
+            { href: "/follow-ups", label: "My follow-ups", icon: "followups", hint: "Missed calls and meetings to book" },
+            { href: "/calls", label: "My calls", icon: "calls", hint: "Every call, with its score" },
+            { href: "/leads", label: "My leads", icon: "leads", hint: "Your clients and where each one is" },
+            { href: "/rollups", label: "My week", icon: "rollups", hint: "Your weekly and monthly trends" },
+          ],
+        },
+        coaching,
       ];
 
-  return (
-    <>
-      <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        {links.map((item) => (
-          <Link key={item.href} href={item.href} className="text-muted hover:text-foreground">
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-      <div className="ml-auto flex flex-wrap items-center gap-3 text-xs">
-        <form action="/search" role="search">
-          <input
-            name="q"
-            placeholder="Search leads and calls"
-            aria-label="Search leads and calls"
-            className="w-44 rounded-md border border-border bg-surface px-2.5 py-1 text-xs"
-          />
-        </form>
-        {day && (
-          <span className={`rounded-full px-2.5 py-0.5 font-medium ${sample ? "bg-warning/15" : "bg-background"}`}>
-            {sample ? "Sample data · " : "Latest calls: "}
-            {formatDay(day)}
-          </span>
-        )}
-        <span className="text-muted" title={me.email ?? undefined}>
-          {me.name}
-        </span>
-        <InstallApp />
-        <form action="/auth/signout" method="post">
-          <button type="submit" className="text-muted underline-offset-2 hover:text-foreground hover:underline">
-            Sign out
-          </button>
-        </form>
-      </div>
-    </>
-  );
+  return <AppNav groups={groups} user={{ name: me.name, title: me.title, email: me.email }} latest={day ? formatDay(day) : null} sample={sample} />;
 }
