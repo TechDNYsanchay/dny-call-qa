@@ -13,7 +13,7 @@ function useExampleAction(action: (prev: ExampleState, form: FormData) => Promis
   }, {});
 }
 
-const BUTTON = "rounded-md border border-border px-2.5 py-1 text-xs hover:bg-background disabled:opacity-60";
+const BUTTON = "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-background disabled:opacity-60";
 
 export function PinButton({ questionId, callId, startSec, quote, speaker }: { questionId: string; callId: string; startSec: number; quote: string; speaker: "agent" | "client" }) {
   const [state, action, pending] = useExampleAction(pinExample);
