@@ -7,7 +7,9 @@
 //   public/icons/icon-{192,512}.png      the installed app on Android and computers
 //   public/icons/icon-maskable-512.png   full-bleed, the "d" inside the safe circle
 //   src/lib/email/email-logo.ts    the logo for the top of every report email, as an inline PNG
+//   src/lib/icon-version.ts        a short hash of the app icons, for their addresses in the manifest
 
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import sharp from "sharp";
 import { iconSvg, LOGO_INK, logoSvg, SMALL_SIZE_EXTRA_WEIGHT } from "../src/lib/brand";
@@ -61,6 +63,19 @@ files.push([
     "// Made by scripts/brand-icons.mts from src/lib/brand.ts; don't edit by hand.",
     "/** The DNY Sales Agent logo at the top of every report email, sent inline with this content id. */",
     `export const EMAIL_LOGO = { cid: "dny-sales-agent-logo", width: ${EMAIL.width}, height: ${EMAIL.height}, png: "${emailPng.toString("base64")}" };`,
+    "",
+  ].join("\n"),
+]);
+
+// Installed apps only fetch an icon again when its address changes, so the manifest adds this.
+const hash = createHash("sha256");
+for (const [path, data] of files) if (path.startsWith("public/icons/")) hash.update(data);
+files.push([
+  "src/lib/icon-version.ts",
+  [
+    "// Made by scripts/brand-icons.mts; don't edit by hand.",
+    "/** Changes whenever the app icons do: installed apps only update an icon whose address changed. */",
+    `export const ICON_VERSION = "${hash.digest("hex").slice(0, 10)}";`,
     "",
   ].join("\n"),
 ]);

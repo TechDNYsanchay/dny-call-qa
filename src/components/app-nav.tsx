@@ -102,7 +102,8 @@ export function AppNav({ groups, user, latest, sample }: Props) {
         </span>
       )}
 
-      {/* Laptop: tabs and More. */}
+      {/* Laptop: a hairline between the logo and the tabs, then the tabs and More. */}
+      <span aria-hidden="true" className="hidden h-6 w-px shrink-0 bg-border lg:ml-2 lg:block" />
       <nav aria-label="Main" className="hidden min-w-0 self-stretch gap-0.5 lg:flex">
         {primary.items.map((item) => (
           <TabLink key={item.href} item={item} active={item.href === current} />
