@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { DayNav } from "@/components/day-nav";
-import { BandBadge, Card, Chip, EmptyState, Loading, PageHeader, StatTile, TrendSparkline } from "@/components/ui";
+import { Avatar, BandBadge, Card, EmptyState, Loading, PageHeader, ScoreFigure, StatTile, StatusLabel, TrendSparkline } from "@/components/ui";
 import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listCalls, listOpenDisputes, listPeople, previousDayAverages, requireMe } from "@/lib/data";
 import { formatClock, formatDay, hardFailLabel, parseDayParam } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
@@ -42,13 +42,18 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
         <DayNav path="/" day={day} first={first} latest={latest} {...around} />
       </PageHeader>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* Five tiles: on two columns the last one spans the row instead of sitting alone. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
         <StatTile label="Calls scored" value={scored.length} note={`of ${calls.length} logged`} />
         <StatTile
           label="Team average"
-          value={teamAverage === null ? "–" : <BandBadge score={teamAverage} band={band(teamAverage, 0)} />}
+          value={teamAverage === null ? <span className="text-muted">–</span> : <ScoreFigure score={teamAverage} band={band(teamAverage, 0)} />}
         />
-        <StatTile label="Red calls" value={team.redCalls.length} note="reviewed in stand-up" />
+        <StatTile
+          label="Red calls"
+          value={team.redCalls.length ? <StatusLabel band="red">{team.redCalls.length}</StatusLabel> : <span className="text-good-ink">0</span>}
+          note="reviewed in stand-up"
+        />
         <StatTile label="VCs booked" value={team.vcsBooked} note={`from ${team.firstCalls} scored first calls`} />
         <StatTile
           label="Proposal dates fixed"
@@ -92,33 +97,44 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
             <tbody>
               {team.rows.map(({ report, trend }) => {
                 const conversion = report.conversion[1] ?? report.conversion[0];
+                const href = day === latest ? `/people/${report.person.id}` : `/people/${report.person.id}?day=${day}`;
+                const days = trend.filter((v) => v !== null).length;
                 return (
-                  <tr key={report.person.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3 sm:px-5">
-                      <div className="font-medium">{report.person.name}</div>
-                      <div className="text-xs text-muted">{report.person.title}</div>
+                  <tr key={report.person.id} className="border-b border-border transition-colors last:border-0 hover:bg-background/60">
+                    <td className="px-4 py-3.5 sm:px-5">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={report.person.name} />
+                        <div className="min-w-0">
+                          <Link href={href} className="font-medium hover:underline">
+                            {report.person.name}
+                          </Link>
+                          <div className="text-xs text-muted">{report.person.title}</div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-2 py-3">
+                    <td className="px-2 py-3.5">
                       {report.average !== null && report.band ? (
-                        <BandBadge score={report.average} band={report.band} />
+                        <ScoreFigure score={report.average} band={report.band} size="md" />
                       ) : (
-                        <Chip>No scored calls</Chip>
+                        <span className="text-xs text-muted">No scored calls</span>
                       )}
                     </td>
-                    <td className="px-2 py-3">
-                      <TrendSparkline values={trend} />
+                    <td className="px-2 py-3.5">
+                      {days >= 2 ? <TrendSparkline values={trend} band={report.band} /> : <span className="text-xs text-muted">Trend after 2 days</span>}
                     </td>
-                    <td className="px-2 py-3 text-right tabular-nums">
-                      {report.scored.length}
+                    <td className="px-2 py-3.5 text-right tabular-nums">
+                      <span className="font-medium">{report.scored.length}</span>
                       <span className="text-muted"> / {report.calls.length}</span>
                     </td>
-                    <td className="px-2 py-3 text-right tabular-nums">{report.hardFailCalls}</td>
-                    <td className="px-2 py-3 text-xs">
-                      <span className="text-muted">{conversion.label}:</span> {conversion.value}
+                    <td className="px-2 py-3.5 text-right tabular-nums">
+                      {report.hardFailCalls ? <StatusLabel band="red">{report.hardFailCalls}</StatusLabel> : <span className="text-muted">0</span>}
                     </td>
-                    <td className="px-4 py-3 text-right sm:px-5">
-                      <Link href={day === latest ? `/people/${report.person.id}` : `/people/${report.person.id}?day=${day}`} className="text-sm font-medium text-brand hover:underline">
-                        Report
+                    <td className="px-2 py-3.5 text-xs">
+                      <span className="text-muted">{conversion.label}:</span> <span className="font-medium">{conversion.value}</span>
+                    </td>
+                    <td className="px-4 py-3.5 text-right sm:px-5">
+                      <Link href={href} className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-background">
+                        Report <span aria-hidden="true">→</span>
                       </Link>
                     </td>
                   </tr>
@@ -134,18 +150,23 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
           {team.redCalls.length === 0 ? (
             <p className="text-sm text-muted">No red calls.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="divide-y divide-border">
               {team.redCalls.map((call) => (
-                <li key={call.id} className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
+                <li key={call.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
                     <Link href={`/calls/${call.id}`} className="font-medium hover:underline">
                       {nameOf(call.personId)} · {call.client.name}
                     </Link>
-                    <div className="text-xs text-muted">
-                      {formatClock(call.startedAt)} ·{" "}
-                      {call.final!.hardFails.length
-                        ? hardFailLabel(call.stream, call.final!.hardFails[0])
-                        : "Score below 60"}
+                    <div className="text-xs">
+                      <span className="text-muted">{formatClock(call.startedAt)} · </span>
+                      {call.final!.hardFails.length ? (
+                        <>
+                          <span className="text-muted">Hard fail · </span>
+                          <span className="text-critical-ink">{hardFailLabel(call.stream, call.final!.hardFails[0])}</span>
+                        </>
+                      ) : (
+                        <span className="text-muted">Score below 60</span>
+                      )}
                     </div>
                   </div>
                   <BandBadge score={call.final!.score} band={call.final!.band} />
@@ -161,9 +182,9 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
           ) : (
             <ul className="space-y-1 text-sm">
               {team.caseStudies.map((c) => (
-                <li key={c.name} className="flex justify-between">
-                  <span>{c.name}</span>
-                  <span className="tabular-nums text-muted">{c.count}</span>
+                <li key={c.name} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">{c.name}</span>
+                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs tabular-nums text-muted">×{c.count}</span>
                 </li>
               ))}
             </ul>

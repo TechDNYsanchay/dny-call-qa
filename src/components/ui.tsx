@@ -60,6 +60,51 @@ export function LevelPoints({ level, weight }: { level: number; weight: number }
 
 /** The band's text colour, e.g. for a call's total. */
 export const bandInk = (band: Band) => INK[band];
+export const bandLabel = (band: Band) => BAND_STYLE[band].label;
+
+/**
+ * A score out of 100 on a thin bar in the band's colour, with gaps where Amber (60) and Green
+ * (80) begin so the distance to the next band shows at a glance.
+ */
+export function ScoreMeter({ score, band, className = "w-24" }: { score: number; band: Band; className?: string }) {
+  return (
+    <span className={`relative block h-1.5 overflow-hidden rounded-full bg-border ${className}`} aria-hidden="true">
+      <span className={`absolute inset-y-0 left-0 rounded-full ${FILL[band]}`} style={{ width: `${Math.max(2, Math.min(100, score))}%` }} />
+      <span className="absolute inset-y-0 left-[60%] w-0.5 bg-surface" />
+      <span className="absolute inset-y-0 left-[80%] w-0.5 bg-surface" />
+    </span>
+  );
+}
+
+/** A score as a large number in its band's colour, the band's shape and name, and the meter. */
+export function ScoreFigure({ score, band, size = "lg" }: { score: number; band: Band; size?: "lg" | "md" }) {
+  return (
+    <span className="inline-flex flex-col gap-1.5">
+      <span className="flex items-baseline gap-2">
+        <span className={`${size === "lg" ? "text-2xl" : "text-base"} font-semibold tabular-nums ${INK[band]}`}>{score}</span>
+        <span className="text-xs">
+          <StatusLabel band={band}>{BAND_STYLE[band].label}</StatusLabel>
+        </span>
+      </span>
+      <ScoreMeter score={score} band={band} className={size === "lg" ? "w-full max-w-36" : "w-24"} />
+    </span>
+  );
+}
+
+/** Initials in a circle, so the people list scans by person. */
+export function Avatar({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+  return (
+    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold text-muted" aria-hidden="true">
+      {initials || "?"}
+    </span>
+  );
+}
 
 export function BandBadge({ band, score }: { band: Band; score?: number }) {
   return (
@@ -88,12 +133,12 @@ export function Card({ title, children, className = "" }: { title?: string; chil
   );
 }
 
-export function StatTile({ label, value, note }: { label: string; value: ReactNode; note?: string }) {
+export function StatTile({ label, value, note }: { label: string; value: ReactNode; note?: ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
-      {note && <div className="mt-0.5 text-xs text-muted">{note}</div>}
+      {note && <div className="mt-1 text-xs text-muted">{note}</div>}
     </div>
   );
 }
@@ -143,7 +188,7 @@ export function Quote({ evidence }: { evidence: Evidence }) {
  * history in the muted hue, today in ink. Fixed 40-100 scale so rows compare.
  */
 /** Daily averages as a small line; `labels` names each point (default: days before today). */
-export function TrendSparkline({ values, labels }: { values: (number | null)[]; labels?: string[] }) {
+export function TrendSparkline({ values, labels, band }: { values: (number | null)[]; labels?: string[]; band?: Band | null }) {
   const w = 104;
   const h = 28;
   const pad = 4;
@@ -155,6 +200,8 @@ export function TrendSparkline({ values, labels }: { values: (number | null)[]; 
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`Trend: ${points.map((p) => p.v).join(", ")}`}>
+      {/* Where Amber begins (60) */}
+      <line x1={pad} x2={w - pad} y1={y(60)} y2={y(60)} className="stroke-border" strokeWidth="1" strokeDasharray="2 3" />
       <polyline
         points={points.map((p) => `${x(p.i)},${y(p.v)}`).join(" ")}
         fill="none"
@@ -169,7 +216,7 @@ export function TrendSparkline({ values, labels }: { values: (number | null)[]; 
           <circle cx={x(p.i)} cy={y(p.v)} r="7" fill="transparent">
             <title>{`${dayLabel(p.i)}: ${p.v}`}</title>
           </circle>
-          {p.i === today && <circle cx={x(p.i)} cy={y(p.v)} r="3.5" className="fill-foreground stroke-surface" strokeWidth="2" />}
+          {p.i === today && <circle cx={x(p.i)} cy={y(p.v)} r="3.5" className={`${band ? BAND_STYLE[band].fill : "fill-foreground"} stroke-surface`} strokeWidth="2" />}
         </g>
       ))}
     </svg>
