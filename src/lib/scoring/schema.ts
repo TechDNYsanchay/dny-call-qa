@@ -67,6 +67,8 @@ export const FIRST_CALL_JUDGED_HARD_FAILS = [
 ] as const;
 export const VISION_CALL_JUDGED_HARD_FAILS = ["fee_before_vision_stage2", "partner_pitched", "proposal_without_date"] as const;
 
+const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
+
 export const FirstCallCaptureSchema = z.object({
   clientName: z.string().nullable(),
   city: z.string().nullable(),
@@ -95,6 +97,10 @@ export const FirstCallCaptureSchema = z.object({
     .enum(["sales_consultant", "south_indian_cafe", "bar", "chain_multi_outlet", "founder_stage2"])
     .nullable(),
   vcDateTime: z.string().nullable(),
+  /** The fixed meeting's date (YYYY-MM-DD), for the follow-up list. Results before 27 Oct 2026 don't have it. */
+  vcDate: IsoDateSchema.nullable().optional(),
+  /** DNY promised to call back, or the client asked to be called back: when, as said, and the date if known. */
+  callBack: z.object({ when: z.string().min(1), date: IsoDateSchema.nullable() }).nullable().optional(),
   caseStudiesMentioned: z.array(z.string()),
 });
 

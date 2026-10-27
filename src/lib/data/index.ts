@@ -4,13 +4,17 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { formatPhone, istDayRange, toIst } from "@/lib/format";
+import { exampleCandidates, type ExampleCandidate } from "@/lib/examples";
+import { followUps, LEAD_WINDOW_DAYS, type FollowUps } from "@/lib/follow-ups";
+import { bestCall, weekStart } from "@/lib/rollups";
+import { addDays, formatPhone, istDayRange, toIst } from "@/lib/format";
 import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
 import { CallResultSchema, FirstCallCaptureSchema } from "@/lib/scoring/schema";
 import { activeSheet, sheetVersion, type Sheet } from "@/lib/scoring/sheets";
 import type { Stream } from "@/lib/scoring/call-sheets";
 import type { FirstCallCapture } from "@/lib/scoring/schema";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
+import type { CallDirection } from "@/lib/callyzer";
 import type { CallRecord, LeadStatus, Person, PersonRole } from "./types";
 
 export type { CallRecord, LeadStatus, Person } from "./types";
@@ -28,6 +32,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CALL_FIELDS = `
   id, stream, person_id, agent_phone, client_phone, lead_id, started_at, duration_sec, recording_status, transcript_status, scoring_status, not_scored_reason,
+  call_direction, missed_alerted_at, missed_resolved_at,
   leads ( name, city, status ),
   call_metrics ( * ),
   call_scores ( score, band, levels, hard_fails, overrides, result, reference_version_ids,
@@ -110,6 +115,9 @@ type CallRow = {
   agent_phone: string | null;
   client_phone: string | null;
   lead_id: string | null;
+  call_direction: CallDirection | null;
+  missed_alerted_at: string | null;
+  missed_resolved_at: string | null;
   started_at: string;
   duration_sec: number;
   recording_status: CallRecord["recordingStatus"];
@@ -244,6 +252,10 @@ function toCallRecord(row: CallRow): CallRecord {
               : "transcription"
         : undefined,
     agentPhone: row.agent_phone ?? undefined,
+    direction: row.call_direction ?? undefined,
+    clientPhone: row.client_phone ?? undefined,
+    missedHandled: Boolean(row.missed_resolved_at),
+    missedAlerted: Boolean(row.missed_alerted_at),
   };
 }
 
@@ -295,8 +307,12 @@ async function readCallsBetween(db: Client, fromDay: string, toDay: string): Pro
 export const listCallsBetween = cache(async (fromDay: string, toDay: string) => readCallsBetween(await supabaseUser(), fromDay, toDay));
 
 export async function getCall(id: string): Promise<CallRecord | null> {
+  return readFullCall(await supabaseUser(), id);
+}
+
+async function readFullCall(db: Client, id: string): Promise<CallRecord | null> {
   if (!UUID.test(id)) return null;
-  const { data, error } = await (await supabaseUser())
+  const { data, error } = await db
     .from("calls")
     .select(`${CALL_FIELDS}, recording_path, source, recording_source_url, transcript_segments ( idx, speaker_label, role, start_sec, end_sec, text, topic )`)
     .eq("id", id)
@@ -314,8 +330,8 @@ export async function getCall(id: string): Promise<CallRecord | null> {
 }
 
 /**
- * A one-hour link to play the recording. Only made after the row-level-security read above
- * returned the call, so the viewer is allowed to see it; the bucket itself stays private.
+ * A one-hour link to play the recording. Only made after the viewer is known to be allowed the
+ * call (the row-level-security read, or a shared example); the bucket itself stays private.
  */
 async function recordingLink(row: CallRow): Promise<string | undefined> {
   if (row.recording_status !== "available" || !row.recording_path) return undefined;
@@ -366,7 +382,29 @@ export async function getCallSheet(stream: Stream, versionId: string | null | un
   return sheetVersion(await supabaseUser(), stream, versionId);
 }
 
+async function readTeamPhones(db: Client): Promise<Set<string>> {
+  const { data, error } = await db.from("people").select("callyzer_phone").not("callyzer_phone", "is", null);
+  if (error) fail("team phones", error);
+  return new Set(data.map((p) => p.callyzer_phone!));
+}
+
+async function readFollowUps(today: string, personId?: string): Promise<FollowUps> {
+  const db = supabaseAdmin();
+  const [calls, phones] = await Promise.all([readCallsBetween(db, addDays(today, -LEAD_WINDOW_DAYS), today), readTeamPhones(db)]);
+  return followUps(calls, phones, today, personId);
+}
+
+/**
+ * The viewer's follow-ups; everyone's for founders, managers and admins. Read with the secret key
+ * so a missed call returned from another team phone still counts as returned, then cut down to
+ * the viewer's own items.
+ */
+export async function getFollowUps(me: Me, today: string): Promise<FollowUps> {
+  return readFollowUps(today, me.canSeeAll ? undefined : me.id);
+}
+
 export const pipelineReads = {
+  followUps: (today: string) => readFollowUps(today),
   activeSheets: () => readActiveSheets(supabaseAdmin()),
   people: () => readPeople(supabaseAdmin()),
   calls: (day: string) => readCalls(supabaseAdmin(), day),
@@ -525,15 +563,22 @@ export function searchTerm(raw: string): string {
   return raw.replace(/[,()*%_\\:"'.]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
+export interface SaidOnCall {
+  call: CallRecord;
+  /** Matching transcript lines, earliest first. */
+  lines: { startSec: number; text: string }[];
+}
+
 export interface SearchResults {
   leads: LeadRow[];
   calls: CallRecord[];
+  said: SaidOnCall[];
 }
 
 /** Leads and calls matching a name, phone, email, city or concept. Row-level security limits executives to their own. */
 export const search = cache(async (raw: string): Promise<SearchResults> => {
   const term = searchTerm(raw);
-  if (term.length < 2) return { leads: [], calls: [] };
+  if (term.length < 2) return { leads: [], calls: [], said: [] };
   const digits = term.replace(/\D/g, "");
   const supabase = await supabaseUser();
   const text = `*${term}*`;
@@ -545,17 +590,36 @@ export const search = cache(async (raw: string): Promise<SearchResults> => {
     `first_call_capture->>concept.ilike.${text}`,
     ...(digits.length >= 4 ? [`phone.ilike.*${digits}*`] : []),
   ].join(",");
-  const [{ data: leadIds, error: leadError }, { data: callRows, error: callError }] = await Promise.all([
+  const [{ data: leadIds, error: leadError }, { data: callRows, error: callError }, { data: lineRows, error: lineError }] = await Promise.all([
     supabase.from("leads").select("id").or(leadFilters).limit(40),
     digits.length >= 4
       ? supabase.from("calls").select(CALL_FIELDS).ilike("client_phone", `%${digits}%`).order("started_at", { ascending: false }).limit(20)
       : Promise.resolve({ data: [], error: null }),
+    // What was said: `term` has no wildcards left in it (searchTerm), so it matches as typed.
+    term.length >= 3 && digits.length < 4
+      ? supabase.from("transcript_segments").select("call_id, start_sec, text").ilike("text", `%${term}%`).limit(200)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (leadError) fail("search leads", leadError);
   if (callError) fail("search calls", callError);
+  if (lineError) fail("search transcripts", lineError);
   const ids = new Set(leadIds.map((l) => l.id));
   const leads = (await listLeads()).filter((l) => ids.has(l.id));
-  return { leads, calls: (callRows as unknown as CallRow[]).map(toCallRecord) };
+
+  const linesByCall = new Map<string, { startSec: number; text: string }[]>();
+  for (const l of lineRows as { call_id: string; start_sec: number; text: string }[]) {
+    linesByCall.set(l.call_id, [...(linesByCall.get(l.call_id) ?? []), { startSec: Number(l.start_sec), text: l.text }]);
+  }
+  let said: SaidOnCall[] = [];
+  if (linesByCall.size) {
+    const { data: saidRows, error: saidError } = await supabase.from("calls").select(CALL_FIELDS).in("id", [...linesByCall.keys()].slice(0, 30));
+    if (saidError) fail("search calls said", saidError);
+    said = (saidRows as unknown as CallRow[])
+      .map(toCallRecord)
+      .map((call) => ({ call, lines: linesByCall.get(call.id)!.sort((a, b) => a.startSec - b.startSec) }))
+      .sort((a, b) => b.call.startedAt.localeCompare(a.call.startedAt));
+  }
+  return { leads, calls: (callRows as unknown as CallRow[]).map(toCallRecord), said };
 });
 
 /** Scores executives have disputed that no founder has reviewed yet, oldest first. */
@@ -620,3 +684,104 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     calls: (calls as unknown as CallRow[]).map(toCallRecord),
   };
 }
+
+export interface ExampleClip {
+  id: string;
+  questionId: string;
+  callId: string;
+  personId: string;
+  clientName: string;
+  startedAt: string;
+  startSec: number;
+  endSec: number;
+  quote: string;
+  score: number | null;
+  band: Band | null;
+  /** A one-hour link to the recording; the player plays only the clip. */
+  recordingUrl?: string;
+}
+
+type ExampleRow = {
+  id: string;
+  question_id: string;
+  call_id: string;
+  start_sec: number;
+  end_sec: number;
+  quote: string;
+  calls: {
+    person_id: string | null;
+    started_at: string;
+    client_phone: string | null;
+    recording_path: string | null;
+    recording_status: string;
+    leads: { name: string | null } | null;
+    call_scores: { score: number; band: Band } | null;
+  } | null;
+};
+
+/**
+ * The pinned examples, which everyone signed in may hear, and (for founders, managers and admins)
+ * the best candidates to pin from the last 60 days. Read with the secret key because executives
+ * can't otherwise see colleagues' calls; only the clip and quote are shown.
+ */
+export async function getExamples(me: Me, today: string): Promise<{ pinned: ExampleClip[]; candidates: ExampleCandidate[] }> {
+  const db = supabaseAdmin();
+  const { data, error } = await db
+    .from("call_examples")
+    .select("id, question_id, call_id, start_sec, end_sec, quote, calls ( person_id, started_at, client_phone, recording_path, recording_status, leads ( name ), call_scores ( score, band ) )")
+    .order("created_at");
+  if (error) fail("examples", error);
+  const rows = data as unknown as ExampleRow[];
+  const paths = [...new Set(rows.flatMap((r) => (r.calls?.recording_status === "available" && r.calls.recording_path ? [r.calls.recording_path] : [])))];
+  const links = new Map<string, string>();
+  if (paths.length) {
+    const { data: signed, error: signError } = await db.storage.from("recordings").createSignedUrls(paths, 60 * 60);
+    if (signError) console.error(`example recording links failed: ${signError.message}`);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
+  }
+  const pinned = rows.map((r) => ({
+    id: r.id,
+    questionId: r.question_id,
+    callId: r.call_id,
+    personId: r.calls?.person_id ?? "",
+    clientName: r.calls?.leads?.name ?? (r.calls?.client_phone ? formatPhone(r.calls.client_phone) : "a client"),
+    startedAt: r.calls ? toIst(r.calls.started_at) : "",
+    startSec: Number(r.start_sec),
+    endSec: Number(r.end_sec),
+    quote: r.quote,
+    score: r.calls?.call_scores ? Number(r.calls.call_scores.score) : null,
+    band: r.calls?.call_scores?.band ?? null,
+    recordingUrl: r.calls?.recording_path ? links.get(r.calls.recording_path) : undefined,
+  }));
+  if (!me.canSeeAll) return { pinned, candidates: [] };
+  const recent = await readCallsBetween(await supabaseUser(), addDays(today, -60), today);
+  return { pinned, candidates: exampleCandidates(recent, new Set(pinned.map((p) => `${p.questionId}:${p.callId}`))) };
+}
+
+/** The call of the week for the week containing `day`, from everyone's calls. */
+export async function getCallOfWeek(day: string): Promise<CallRecord | null> {
+  const monday = weekStart(day);
+  return bestCall(await readCallsBetween(supabaseAdmin(), monday, addDays(monday, 6)));
+}
+
+/**
+ * A call shared with the whole team: one with a pinned example, or the call of its week. Null for
+ * any other call, so executives still can't open colleagues' calls in general.
+ */
+export async function getSharedCall(id: string): Promise<CallRecord | null> {
+  if (!UUID.test(id)) return null;
+  const db = supabaseAdmin();
+  const call = await readFullCall(db, id);
+  if (!call) return null;
+  const { count, error } = await db.from("call_examples").select("id", { count: "exact", head: true }).eq("call_id", id);
+  if (error) fail("example check", error);
+  if ((count ?? 0) > 0) return call;
+  return (await getCallOfWeek(call.startedAt.slice(0, 10)))?.id === id ? call : null;
+}
+
+/** Everyone's name, so an example or the call of the week can say whose call it is. Names only. */
+export const teamNames = cache(async (): Promise<Map<string, string>> => {
+  const { data, error } = await supabaseAdmin().from("people").select("id, full_name");
+  if (error) fail("team names", error);
+  return new Map(data.map((p) => [p.id, p.full_name]));
+});

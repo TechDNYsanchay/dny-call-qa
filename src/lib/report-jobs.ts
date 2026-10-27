@@ -4,10 +4,11 @@
 
 import "server-only";
 import { pipelineReads } from "@/lib/data";
-import { personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { forPerson, isOverdue, type MissedItem } from "@/lib/follow-ups";
 import { alert } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email/send";
-import { istDayRange } from "@/lib/format";
+import { istDayRange, toIst } from "@/lib/format";
 import { personDayReport, teamSummary } from "@/lib/reports";
 import { rollup, type Period } from "@/lib/rollups";
 import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
@@ -77,11 +78,14 @@ export interface SendResult {
 export async function sendDailyReports(day: string, { preview = false, limit = Infinity } = {}): Promise<SendResult> {
   const db = supabaseAdmin();
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
-  const [people, calls, previous, sheets] = await Promise.all([
+  // Follow-ups are as of now (the morning the email goes out), not the report day.
+  const today = toIst(new Date().toISOString()).slice(0, 10);
+  const [people, calls, previous, sheets, followUps] = await Promise.all([
     pipelineReads.people(),
     pipelineReads.calls(day),
     pipelineReads.previousDayAverages(day),
     pipelineReads.activeSheets(),
+    pipelineReads.followUps(today),
   ]);
   const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
   const testInbox = await reportsTestInbox();
@@ -119,12 +123,12 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   for (const person of people.filter((p) => SCORED_ROLES.includes(p.role))) {
     const report = personDayReport(person, calls, sheets.questions);
     if (report.calls.length === 0) continue;
-    await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site));
+    await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site, { items: forPerson(followUps, person.id), today }));
   }
 
   // Founders, managers and admins get the team summary (one copy to the test inbox while testing).
   if (calls.length > 0) {
-    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site);
+    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site, followUps);
     const readers = people.filter((p) => READER_ROLES.includes(p.role));
     const targets = testInbox ? [{ name: "test inbox", email: null }] : readers;
     if (targets.length === 0) result.skipped.push({ kind: "team", who: "founders", why: "no founder, manager or admin on the team list" });
@@ -177,5 +181,47 @@ export async function sendRollups(period: Period, { preview = false, limit = Inf
   const email = teamRollupEmail(r, site);
   const targets = testInbox ? [{ name: "test inbox", email: null }] : people.filter((p) => READER_ROLES.includes(p.role));
   for (const reader of targets) await deliver("team", "team", reader.name, reader.email, email);
+  return result;
+}
+
+export interface MissedAlertResult {
+  sent: { to: string; person: string; calls: number }[];
+  skipped: { person: string; why: string }[];
+  preview?: Email[];
+}
+
+/**
+ * Hourly in working hours: emails each executive the clients who called in the last day, weren't
+ * answered and still haven't been called back after 2 hours. Each missed call is in one alert only.
+ */
+export async function sendMissedCallAlerts({ preview = false } = {}): Promise<MissedAlertResult> {
+  const db = supabaseAdmin();
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
+  const nowMs = Date.now();
+  const today = toIst(new Date(nowMs).toISOString()).slice(0, 10);
+  const [people, followUps, testInbox] = await Promise.all([pipelineReads.people(), pipelineReads.followUps(today), reportsTestInbox()]);
+  const due = followUps.missed.filter((m) => isOverdue(m, nowMs) && !m.alerted && Date.parse(m.lastAt) > nowMs - 24 * 3600_000);
+  const result: MissedAlertResult = { sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
+
+  const byPerson = new Map<string, MissedItem[]>();
+  for (const m of due) byPerson.set(m.personId, [...(byPerson.get(m.personId) ?? []), m]);
+  for (const [personId, items] of byPerson) {
+    const person = people.find((p) => p.id === personId);
+    const email = missedCallsEmail(person?.name ?? "Unknown number", items, today, site);
+    const to = testInbox || person?.email;
+    if (preview) {
+      result.preview!.push(email);
+      continue;
+    }
+    if (!person) result.skipped.push({ person: personId || "a phone not on the team list", why: "not on the team list" });
+    else if (!to) result.skipped.push({ person: person.name, why: "no email address on the team list" });
+    else {
+      await sendEmail(to, email);
+      result.sent.push({ to, person: person.name, calls: items.length });
+    }
+    // Marked either way, so a person added later doesn't get a backlog of old misses.
+    const { error } = await db.from("calls").update({ missed_alerted_at: new Date().toISOString() }).in("id", items.flatMap((m) => m.callIds));
+    if (error) throw new Error(`mark missed calls alerted: ${error.message}`);
+  }
   return result;
 }

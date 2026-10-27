@@ -1,3 +1,4 @@
+import type { CallDirection } from "@/lib/callyzer";
 import type { Stream } from "@/lib/scoring/call-sheets";
 import type { FinalScore, NotScoredReason, RecordingStatus } from "@/lib/scoring/compute";
 import type { CallMetrics, SpeakerRole, Topic } from "@/lib/scoring/metrics";
@@ -77,4 +78,10 @@ export interface CallRecord {
   inProgress?: InProgress;
   /** The executive's phone from Callyzer, kept for calls from numbers not on the team list. */
   agentPhone?: string;
+  /** Incoming, outgoing, missed or rejected (Callyzer). */
+  direction?: CallDirection;
+  clientPhone?: string;
+  /** A missed call someone marked as handled, and one the executive was already emailed about. */
+  missedHandled?: boolean;
+  missedAlerted?: boolean;
 }

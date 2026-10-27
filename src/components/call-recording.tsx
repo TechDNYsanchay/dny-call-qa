@@ -2,17 +2,19 @@
 
 // The call page's recording player and transcript. Clicking a line plays the recording from there.
 
+import { useEffect, useRef } from "react";
 import { Card } from "@/components/ui";
 import type { TranscriptLine } from "@/lib/data/types";
 import { formatTimestamp } from "@/lib/format";
 
 const PLAYER_ID = "call-recording";
 
-export function RecordingPlayer({ url, pageUrl, fallback }: { url?: string; pageUrl?: string; fallback: string }) {
+/** `startAt` (seconds) cues the recording there, e.g. from a search result. */
+export function RecordingPlayer({ url, pageUrl, fallback, startAt }: { url?: string; pageUrl?: string; fallback: string; startAt?: number }) {
   return (
     <Card className="mb-6">
       {url ? (
-        <audio id={PLAYER_ID} controls preload="metadata" src={url} className="w-full">
+        <audio id={PLAYER_ID} controls preload="metadata" src={startAt ? `${url}#t=${startAt}` : url} className="w-full">
           Your browser can&apos;t play this recording.
         </audio>
       ) : pageUrl ? (
@@ -49,8 +51,12 @@ function speakerNames(lines: TranscriptLine[]): (line: TranscriptLine) => string
             : line.speaker;
 }
 
-export function Transcript({ lines }: { lines: TranscriptLine[] }) {
+/** `focusSec` highlights the line spoken at that second and scrolls it into view. */
+export function Transcript({ lines, focusSec }: { lines: TranscriptLine[]; focusSec?: number }) {
   const nameOf = speakerNames(lines);
+  const focused = focusSec === undefined ? -1 : lines.findLastIndex((l) => l.startSec <= focusSec + 0.5);
+  const focusRef = useRef<HTMLLIElement>(null);
+  useEffect(() => focusRef.current?.scrollIntoView({ block: "center" }), []);
   const rolesKnown = lines.some((l) => l.role !== "unknown");
   const playFrom = (sec: number) => {
     const player = document.getElementById(PLAYER_ID);
@@ -66,7 +72,7 @@ export function Transcript({ lines }: { lines: TranscriptLine[] }) {
       )}
       <ol className="max-h-[36rem] space-y-1 overflow-y-auto pr-1">
         {lines.map((line, i) => (
-          <li key={i}>
+          <li key={i} ref={i === focused ? focusRef : undefined} className={i === focused ? "rounded-md bg-brand/10" : undefined}>
             <button
               type="button"
               onClick={() => playFrom(line.startSec)}

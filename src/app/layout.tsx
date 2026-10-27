@@ -54,7 +54,9 @@ async function SignedInNav() {
         { href: "/", label: "Team" },
         { href: "/calls", label: "Calls" },
         { href: "/leads", label: "Leads" },
+        { href: "/follow-ups", label: "Follow-ups" },
         { href: "/rollups", label: "Roll-ups" },
+        { href: "/examples", label: "Examples" },
         { href: "/sheets", label: "Call sheets" },
         { href: "/team-members", label: "Team members" },
         { href: "/scorecards", label: "Scorecards" },
@@ -63,7 +65,9 @@ async function SignedInNav() {
         { href: `/people/${me.id}`, label: "My report" },
         { href: "/calls", label: "My calls" },
         { href: "/leads", label: "My leads" },
+        { href: "/follow-ups", label: "My follow-ups" },
         { href: "/rollups", label: "My week" },
+        { href: "/examples", label: "Examples" },
         { href: "/scorecards", label: "Scorecards" },
       ];
 

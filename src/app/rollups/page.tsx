@@ -162,6 +162,21 @@ async function Rollups({ searchParams }: Pick<PageProps<"/rollups">, "searchPara
         <FunnelChart funnel={r.funnel} />
       </Card>
 
+      <Card title={me.canSeeAll ? `Call of the ${period.kind}` : `My best call this ${period.kind}`} className="mb-6">
+        {r.callOfPeriod ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <Link href={`/calls/${r.callOfPeriod.id}`} className="hover:underline">
+              <span className="font-medium">{people.find((p) => p.id === r.callOfPeriod!.personId)?.name ?? "Unknown"}</span> with {r.callOfPeriod.client.name} ·{" "}
+              {formatDay(r.callOfPeriod.startedAt).replace(/ \d{4}$/, "")}, {formatClock(r.callOfPeriod.startedAt)}
+            </Link>
+            <BandBadge score={r.callOfPeriod.final!.score} band={r.callOfPeriod.final!.band} />
+          </div>
+        ) : (
+          <p className="text-sm text-muted">No call scored Amber or Green in this {period.kind}.</p>
+        )}
+        {me.canSeeAll && <p className="mt-2 text-xs text-muted">The highest-scoring call that isn&apos;t Red. The whole team can listen to it from the Examples page and the {period.kind}ly email.</p>}
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Hard fails by type">
           {r.hardFails.length ? (

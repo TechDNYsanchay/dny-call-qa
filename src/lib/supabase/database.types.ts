@@ -86,6 +86,54 @@ export type Database = {
           },
         ]
       }
+      call_examples: {
+        Row: {
+          call_id: string
+          created_at: string
+          created_by: string | null
+          end_sec: number
+          id: string
+          question_id: string
+          quote: string
+          start_sec: number
+        }
+        Insert: {
+          call_id: string
+          created_at?: string
+          created_by?: string | null
+          end_sec: number
+          id?: string
+          question_id: string
+          quote: string
+          start_sec: number
+        }
+        Update: {
+          call_id?: string
+          created_at?: string
+          created_by?: string | null
+          end_sec?: number
+          id?: string
+          question_id?: string
+          quote?: string
+          start_sec?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_examples_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_examples_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_metrics: {
         Row: {
           agent_share_first_half: number
@@ -244,6 +292,9 @@ export type Database = {
           duration_sec: number
           id: string
           lead_id: string | null
+          missed_alerted_at: string | null
+          missed_resolved_at: string | null
+          missed_resolved_by: string | null
           not_scored_reason: string | null
           person_id: string | null
           recording_path: string | null
@@ -271,6 +322,9 @@ export type Database = {
           duration_sec: number
           id?: string
           lead_id?: string | null
+          missed_alerted_at?: string | null
+          missed_resolved_at?: string | null
+          missed_resolved_by?: string | null
           not_scored_reason?: string | null
           person_id?: string | null
           recording_path?: string | null
@@ -298,6 +352,9 @@ export type Database = {
           duration_sec?: number
           id?: string
           lead_id?: string | null
+          missed_alerted_at?: string | null
+          missed_resolved_at?: string | null
+          missed_resolved_by?: string | null
           not_scored_reason?: string | null
           person_id?: string | null
           recording_path?: string | null
@@ -321,6 +378,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_missed_resolved_by_fkey"
+            columns: ["missed_resolved_by"]
+            isOneToOne: false
+            referencedRelation: "people"
             referencedColumns: ["id"]
           },
           {

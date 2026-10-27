@@ -23,16 +23,19 @@ import { areasFor, hardFailsFor } from "@/lib/scoring/scorecards";
 
 type AreaResult = FirstCallResult["areas"]["opening"];
 
-export default function CallPage({ params }: PageProps<"/calls/[id]">) {
+export default function CallPage({ params, searchParams }: PageProps<"/calls/[id]">) {
   return (
     <Suspense fallback={<Loading what="call" />}>
-      <CallDetail params={params} />
+      <CallDetail params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) {
+async function CallDetail({ params, searchParams }: PageProps<"/calls/[id]">) {
   const { id } = await params;
+  // ?t=SECONDS opens the call at a moment (search results, examples).
+  const t = Number((await searchParams).t);
+  const startAt = Number.isFinite(t) && t > 0 ? Math.floor(t) : undefined;
   const me = await requireMe();
   // Row-level security returns nothing for someone else's call, so it reads as not found.
   const call = await getCall(id);
@@ -56,6 +59,7 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
       </PageHeader>
 
       <RecordingPlayer
+        startAt={startAt}
         url={call.recordingUrl}
         pageUrl={call.recordingPageUrl}
         fallback={
@@ -92,7 +96,7 @@ async function CallDetail({ params }: Pick<PageProps<"/calls/[id]">, "params">) 
           <DisputeForm callId={call.id} />
         </div>
       )}
-      {call.transcript.length > 0 && <Transcript lines={call.transcript} />}
+      {call.transcript.length > 0 && <Transcript lines={call.transcript} focusSec={startAt} />}
     </>
   );
 }

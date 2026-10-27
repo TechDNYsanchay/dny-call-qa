@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CALLS, PEOPLE, PREVIOUS_DAYS, REPORT_DATE } from "@/lib/data/sample-data";
 import { personDayReport, teamSummary } from "@/lib/reports";
 import { rollup, weekPeriod } from "@/lib/rollups";
-import { disputeEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail } from "./report-emails";
+import { disputeEmail, missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail } from "./report-emails";
 
 const calls = [...CALLS].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 const person = (id: string) => PEOPLE.find((p) => p.id === id)!;
@@ -101,5 +101,29 @@ describe("the roll-up funnel", () => {
     expect(html).toContain("Lead funnel");
     expect(html).toContain("10 calls logged → 8 connected → 4 leads reached · 1 marked lost");
     expect(html).toMatch(/Vision call booked<\/td>.*?2 <span[^>]*>· 50%/);
+  });
+});
+
+describe("follow-ups in the emails", () => {
+  const missed = { phone: "+919800000001", leadId: "lead-1", name: "Mohit", personId: "p", firstAt: "2026-10-27T10:05:00+05:30", lastAt: "2026-10-27T10:30:00+05:30", count: 2, callIds: ["a", "b"], alerted: false };
+
+  it("lists today's follow-ups in the person's email", () => {
+    const report = personDayReport(PEOPLE.find((p) => p.role === "executive")!, calls);
+    const email = personReportEmail(report, REPORT_DATE, SITE, {
+      items: { missed: [missed], callBacks: [{ kind: "call_back", leadId: "lead-2", name: "Asha", city: "Pune", personId: "p", callId: "c", when: "after 4 pm", date: "2026-10-27", quality: "warm", lastCallAt: "2026-10-26T12:00:00+05:30" }], meetings: [], toBook: [] },
+      today: "2026-10-27",
+    });
+    expect(email.html).toContain("Today's follow-ups");
+    expect(email.html).toContain("Missed calls to return");
+    expect(email.html).toContain("since Today 10:05");
+    expect(email.html).toContain("Asha</a> · after 4 pm");
+    expect(email.text).toContain("Follow-ups: 1 missed calls to return, 1 call-backs");
+  });
+
+  it("alerts an executive to missed calls with a tap-to-call number", () => {
+    const email = missedCallsEmail("Support", [missed], "2026-10-27", SITE);
+    expect(email.subject).toBe("1 missed call to return");
+    expect(email.html).toContain('href="tel:+919800000001"');
+    expect(email.html).toContain("missed 2 times, first at Today 10:05");
   });
 });

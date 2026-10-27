@@ -3,7 +3,8 @@
 // Inline styles only, since email clients ignore stylesheets.
 
 import type { CallRecord } from "@/lib/data/types";
-import { formatClock, formatDay, formatDuration, hardFailLabel } from "@/lib/format";
+import { followUpCount, relativeDay, type FollowUps, type MissedItem } from "@/lib/follow-ups";
+import { formatClock, formatDay, formatDuration, formatPhone, hardFailLabel } from "@/lib/format";
 import type { PersonDayReport, TeamSummary } from "@/lib/reports";
 import { FUNNEL_STAGES, pctOf, type Funnel, type PersonRollup, type Rollup } from "@/lib/rollups";
 import type { Band } from "@/lib/scoring/compute";
@@ -58,7 +59,42 @@ function quoteHtml(e: { quote: string; at: string }) {
   return `<p style="${QUOTE}">${esc(e.at)} “${esc(e.quote)}”</p>`;
 }
 
-export function personReportEmail(report: PersonDayReport, day: string, siteUrl: string): Email {
+const when = (iso: string, today: string) => `${relativeDay(iso.slice(0, 10), today) ?? shortDay(iso.slice(0, 10))} ${formatClock(iso)}`;
+const listItem = (html: string) => `<li style="margin-bottom:4px">${html}</li>`;
+const MAX_ITEMS = 6;
+
+/** The name saved for a missed caller, or null when Callyzer only has the number. */
+const savedName = (m: MissedItem) => (m.name === formatPhone(m.phone) ? null : m.name);
+
+/** "Mohit · +91 98000 00001" with the number tap-to-call, or just the number. */
+function callerHtml(m: MissedItem, siteUrl: string): string {
+  const name = savedName(m);
+  const nameHtml = name ? (m.leadId ? `<a href="${esc(`${siteUrl}/leads/${m.leadId}`)}" style="color:#1c1c1a">${esc(name)}</a> · ` : `${esc(name)} · `) : "";
+  return `${nameHtml}<a href="tel:${esc(m.phone)}" style="color:#1c1c1a">${esc(formatPhone(m.phone))}</a>`;
+}
+
+/** The 8 am email's "today's follow-ups": missed calls, call-backs, meetings, leads to book. */
+function followUpsHtml(f: FollowUps, today: string, siteUrl: string): string {
+  if (followUpCount(f) === 0) return "";
+  const more = (n: number) => (n > MAX_ITEMS ? listItem(`<span style="${MUTED}">and ${n - MAX_ITEMS} more</span>`) : "");
+  const group = (title: string, items: string[]) =>
+    items.length ? `<p style="margin:12px 0 4px;font-weight:600">${title}</p><ul style="padding-left:18px;margin:0">${items.slice(0, MAX_ITEMS).join("")}${more(items.length)}</ul>` : "";
+  const leadLink = (leadId: string, name: string) => `<a href="${esc(`${siteUrl}/leads/${leadId}`)}" style="color:#1c1c1a">${esc(name)}</a>`;
+  const day = (date: string | null) => (date ? (relativeDay(date, today) ?? shortDay(date)) : "no date");
+  return [
+    `<h2 style="${H2}">Today's follow-ups</h2>`,
+    group(
+      "Missed calls to return",
+      f.missed.map((m) => listItem(`${callerHtml(m, siteUrl)} <span style="${MUTED}">· missed ${m.count === 1 ? "" : `${m.count}× · `}since ${when(m.firstAt, today)}</span>`)),
+    ),
+    group("Call-backs promised", f.callBacks.map((c) => listItem(`${leadLink(c.leadId, c.name)} · ${esc(c.when ?? "")} <span style="${MUTED}">· ${day(c.date)}</span>`))),
+    group("Meetings coming up", f.meetings.map((c) => listItem(`${leadLink(c.leadId, c.name)} · ${esc(c.when ?? "")}`))),
+    group("Hot and warm leads with no meeting yet", f.toBook.map((c) => listItem(`${leadLink(c.leadId, c.name)}${c.city ? ` · ${esc(c.city)}` : ""} <span style="${MUTED}">· ${c.quality ?? ""}</span>`))),
+    `<p style="margin:8px 0 0"><a href="${esc(`${siteUrl}/follow-ups`)}" style="color:#c23b2f">All follow-ups</a></p>`,
+  ].join("");
+}
+
+export function personReportEmail(report: PersonDayReport, day: string, siteUrl: string, followUps?: { items: FollowUps; today: string }): Email {
   const { person } = report;
   const when = shortDay(day);
   const link = (path: string) => `${siteUrl}${path}`;
@@ -101,6 +137,7 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
     strengths && `<h2 style="${H2}">What went well</h2><ul style="padding-left:18px;margin:0">${strengths}</ul>`,
     fixes && `<h2 style="${H2}">Fix next</h2><ul style="padding-left:18px;margin:0">${fixes}</ul>`,
     report.tomorrow && `<h2 style="${H2}">Tomorrow's one thing</h2><p style="${P}">${esc(report.tomorrow)}</p>`,
+    followUps && followUpsHtml(followUps.items, followUps.today, siteUrl),
     (calls || othersLine) &&
       `<h2 style="${H2}">Scored calls</h2>${calls ? `<table style="border-collapse:collapse;font-size:13px">${calls}</table>` : ""}${othersLine}`,
   ]
@@ -112,6 +149,9 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
     `Average ${bandText(report.average, report.band)} · ${scoredLine} · ${report.hardFailCalls} with a hard fail`,
     ...report.fixes.map((f) => `Fix: ${f.text} (${f.evidence.at} "${f.evidence.quote}") Better line: ${f.betterLine}`),
     report.tomorrow ? `Tomorrow: ${report.tomorrow}` : "",
+    followUps && followUpCount(followUps.items)
+      ? `Follow-ups: ${followUps.items.missed.length} missed calls to return, ${followUps.items.callBacks.length} call-backs, ${followUps.items.meetings.length} meetings, ${followUps.items.toBook.length} leads to book (${link("/follow-ups")})`
+      : "",
     `Full report: ${link(`/people/${person.id}?day=${day}`)}`,
   ]
     .filter(Boolean)
@@ -124,7 +164,7 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
   };
 }
 
-export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: string): Email {
+export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: string, followUps?: FollowUps): Email {
   const when = shortDay(day);
   const link = (path: string) => `${siteUrl}${path}`;
   const scored = summary.rows.flatMap((r) => r.report.scored);
@@ -162,6 +202,9 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
     rows &&
       `<h2 style="${H2}">People</h2><table style="border-collapse:collapse;font-size:13px"><tr style="${MUTED};text-align:left"><th style="padding:0 8px 4px 0;font-weight:500">Person</th><th style="padding:0 8px 4px;font-weight:500">Scored</th><th style="padding:0 8px 4px;font-weight:500">Average</th><th style="padding:0 8px 4px;font-weight:500">Hard fails</th><th style="padding:0 0 4px 8px;font-weight:500">VCs booked</th></tr>${rows}</table>`,
     red && `<h2 style="${H2}">Red calls to review in stand-up</h2><ul style="padding-left:18px;margin:0">${red}</ul>`,
+    followUps &&
+      followUpCount(followUps) > 0 &&
+      `<h2 style="${H2}">Open follow-ups</h2><p style="${P}">${followUps.missed.length} missed call${followUps.missed.length === 1 ? "" : "s"} not returned · ${followUps.callBacks.length} call-back${followUps.callBacks.length === 1 ? "" : "s"} promised · ${followUps.meetings.length} meeting${followUps.meetings.length === 1 ? "" : "s"} coming up · ${followUps.toBook.length} hot or warm lead${followUps.toBook.length === 1 ? "" : "s"} with no meeting. <a href="${esc(link("/follow-ups"))}" style="color:#c23b2f">See them</a></p>`,
     topMissed.length &&
       `<h2 style="${H2}">Questions skipped most</h2><ul style="padding-left:18px;margin:0">${topMissed.map((m) => `<li>${esc(m.question)} <span style="${MUTED}">(${m.count} call${m.count === 1 ? "" : "s"})</span></li>`).join("")}</ul>`,
   ]
@@ -192,6 +235,15 @@ const changeText = (value: number | null, against: string) =>
 
 const periodName = (r: { period: { kind: "week" | "month" } }) => (r.period.kind === "week" ? "Weekly" : "Monthly");
 
+/** The team's best call of the period, which anyone on the team can open. */
+function callOfPeriodHtml(r: Rollup, siteUrl: string): string {
+  const c = r.callOfPeriod;
+  if (!c) return "";
+  const who = r.people.find((p) => p.person.id === c.personId)?.person.name ?? "A colleague";
+  const href = `${siteUrl}/examples/call/${c.id}`;
+  return `<h2 style="${H2}">Call of the ${r.period.kind}</h2><p style="${P}"><a href="${esc(href)}" style="color:#1c1c1a">${esc(who)}'s call with ${esc(c.client.name)}</a> · ${esc(shortDay(c.startedAt.slice(0, 10)))} · ${bandHtml(c.final!.score, c.final!.band)}. <a href="${esc(href)}" style="color:#c23b2f">Listen to the whole call</a></p>`;
+}
+
 /** The funnel as a table: email clients can't be trusted with charts, so each bar is a sized cell. */
 function funnelHtml(f: Funnel): string {
   const rows = FUNNEL_STAGES.map((s) => {
@@ -221,6 +273,7 @@ export function teamRollupEmail(r: Rollup, siteUrl: string): Email {
     rows &&
       `<h2 style="${H2}">Leaderboard</h2><table style="border-collapse:collapse;font-size:13px"><tr style="${MUTED};text-align:left"><th style="padding:0 8px 4px 0;font-weight:500">Person</th><th style="padding:0 8px 4px;font-weight:500">Scored</th><th style="padding:0 8px 4px;font-weight:500">Average</th><th style="padding:0 8px 4px;font-weight:500">Hard fails</th><th style="padding:0 0 4px 8px;font-weight:500">VCs booked</th></tr>${rows}</table>`,
     r.funnel.leads > 0 && funnelHtml(r.funnel),
+    callOfPeriodHtml(r, siteUrl),
     r.hardFails.length &&
       `<h2 style="${H2}">Hard fails by type</h2><ul style="padding-left:18px;margin:0">${r.hardFails.map((h) => `<li>${esc(h.label)} <span style="${MUTED}">×${h.count}</span></li>`).join("")}</ul>`,
     r.missed.length &&
@@ -250,6 +303,7 @@ export function personRollupEmail(p: PersonRollup, r: Rollup, siteUrl: string): 
     `<li><a href="${esc(`${siteUrl}/calls/${c.id}`)}" style="color:#1c1c1a">${label}: ${esc(formatDay(c.startedAt))} ${formatClock(c.startedAt)} · ${esc(c.client.name)}</a> · ${bandHtml(c.final!.score, c.final!.band)}</li>`;
   const body = [
     `<p style="${P}">Average ${bandHtml(p.average, p.band)}${changeHtml(p.change, r.period.previous.label)} · ${p.scored} of ${p.calls} calls scored · ${p.hardFailCalls} with a hard fail · VCs booked: ${p.vcsBooked} of ${p.firstCallsScored}${p.avgClientSharePct === null ? "" : ` · clients talked ${p.avgClientSharePct}% on average`}</p>`,
+    callOfPeriodHtml(r, siteUrl),
     (p.best || p.worst) &&
       `<h2 style="${H2}">Listen back</h2><ul style="padding-left:18px;margin:0">${p.best ? callLink("Best call", p.best) : ""}${p.worst ? callLink("Weakest call", p.worst) : ""}</ul>`,
     p.missed.length &&
@@ -275,4 +329,23 @@ export function disputeEmail(d: { who: string; client: string; when: string; sco
   ].join("\n");
   const text = [`${d.who} disputes the score on their call with ${d.client} (${d.when}): ${bandText(d.score, d.band)}`, `“${d.comment}”`, `Review it: ${d.link}`].join("\n");
   return { subject, html: layout(`Score disputed by ${d.who}`, body, { href: d.link, label: "Review the call" }), text };
+}
+
+/** The hourly alert to an executive: clients who called, weren't answered, and are still waiting. */
+export function missedCallsEmail(personName: string, items: MissedItem[], today: string, siteUrl: string): Email {
+  const n = items.length;
+  const subject = `${n} missed call${n === 1 ? "" : "s"} to return`;
+  const rows = items
+    .map(
+      (m) =>
+        `<li style="margin-bottom:6px">${callerHtml(m, siteUrl)} <span style="${MUTED}">· missed ${m.count === 1 ? "once" : `${m.count} times`}, first at ${when(m.firstAt, today)}</span></li>`,
+    )
+    .join("");
+  const body = [
+    `<p style="${P}">${n === 1 ? "This client" : "These clients"} called, weren't answered, and ${n === 1 ? "hasn't" : "haven't"} been called back for over 2 hours.</p>`,
+    `<ul style="padding-left:18px;margin:0">${rows}</ul>`,
+    `<p style="margin:12px 0 0;${MUTED}">Calling back clears it. If they were reached another way, mark it handled on the Follow-ups page.</p>`,
+  ].join("\n");
+  const text = [`${personName}: ${subject}`, ...items.map((m) => `${[savedName(m), formatPhone(m.phone)].filter(Boolean).join(" · ")} · first missed ${when(m.firstAt, today)}`), `Follow-ups: ${siteUrl}/follow-ups`].join("\n");
+  return { subject, html: layout(subject, body, { href: `${siteUrl}/follow-ups`, label: "Open follow-ups" }), text };
 }

@@ -64,6 +64,7 @@ export function firstCallRows(c: FirstCallResult["capture"]): CaptureRow[] {
     ["Lead quality", c.leadQuality && words(c.leadQuality)],
     ["Suggested route", c.suggestedRoute && ROUTE[c.suggestedRoute]],
     ["VC booked", c.vcDateTime],
+    ["Call back", c.callBack ? c.callBack.when : null],
     ["Case studies mentioned", c.caseStudiesMentioned.join(", ") || null],
   ];
   return rows.map(([label, value]) => [label, value ?? "Not captured"]);

@@ -5,7 +5,7 @@ import { addDays, toIst } from "@/lib/format";
 import { syncCallyzer } from "@/lib/ingest/callyzer-api";
 import { syncTldv } from "@/lib/ingest/tldv";
 import { transcribePending } from "@/lib/ingest/transcribe";
-import { buildDailyReports, sendDailyReports, sendRollups } from "@/lib/report-jobs";
+import { buildDailyReports, sendDailyReports, sendMissedCallAlerts, sendRollups } from "@/lib/report-jobs";
 import { monthPeriod, weekPeriod, type Period } from "@/lib/rollups";
 import { TranscriberNotConfigured } from "@/lib/transcription";
 import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
@@ -24,6 +24,7 @@ const JOBS = {
   "build-reports": "06:00 IST: flag unscored calls, write capture fields to leads, build reports",
   "send-reports": "08:00 IST: send each person's QA report and the founders' summary",
   "send-rollups": "08:15 IST: on Mondays the weekly roll-up for last week, on the 1st the monthly one for last month",
+  "missed-calls": "Hourly, 09:30-20:30 IST: email executives the missed client calls not returned within 2 hours",
 } as const;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,6 +38,7 @@ const WHAT_STOPS: Record<string, string> = {
   "send-reports": "The 8 am reports may not have gone out.",
   "send-rollups": "The weekly or monthly roll-up email may not have gone out.",
   "tldv-sync": "Vision calls from tl;dv aren't being collected.",
+  "missed-calls": "Executives aren't being told about missed client calls; the Follow-ups page still lists them.",
 };
 const MAX_RANGE_DAYS = 15;
 
@@ -91,6 +93,11 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
         runs.push({ period: period.label, ...(await sendRollups(period, { preview: params.get("preview") === "1", limit: limit > 0 ? limit : Infinity })) });
       }
       return Response.json({ job, runs });
+    }
+    if (job === "missed-calls") {
+      // ?preview=1 shows the emails without sending them or marking the calls.
+      const preview = new URL(request.url).searchParams.get("preview") === "1";
+      return Response.json({ job, ...(await sendMissedCallAlerts({ preview })) });
     }
     if (job === "tldv-sync") {
       if (!process.env.TLDV_API_KEY) return Response.json({ job, done: false, note: "TLDV_API_KEY is not set" }, { status: 202 });

@@ -113,6 +113,11 @@ export async function checkAndSave(db: Db, callId: string, json: unknown, { dryR
   const result = parsed.data;
   const errors: string[] = [];
   if (result.stream !== call.stream) errors.push(`Call is a ${call.stream}, result is a ${result.stream}`);
+  if (result.stream === "first_call") {
+    if (result.capture.vcDate === undefined) errors.push("capture.vcDate is required: the fixed meeting's date as YYYY-MM-DD, or null");
+    if (result.capture.callBack === undefined) errors.push("capture.callBack is required: { when, date } if a call-back was promised or asked for, or null");
+    if (result.capture.vcDateTime && result.capture.vcDate === null) errors.push("capture.vcDate must be set when vcDateTime is (work out the date from the call date)");
+  }
 
   const labels = new Set(segments.map((s) => s.speaker_label));
   const agentLabels = speakerLabels(result.speakerRoles.agent);

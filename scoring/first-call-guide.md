@@ -80,6 +80,11 @@ the sheet captures is missing, e.g. name but no email, or size but not whether i
     - warm: interested, but the meeting or fit is still open
     - cold: not interested, or unrealistic
   - **`vcDateTime`:** only when a meeting was actually fixed: plain text with the actual date and time (work it out from the call date), and say if it's in person. Otherwise `null`; describe an unfixed ask in the `cta` reason instead.
+  - **`vcDate`:** the same meeting's date as `YYYY-MM-DD`, or `null` when no meeting was fixed. Required.
+  - **`callBack`:** when DNY promised to call the client back, or the client asked to be called back
+    at a time: `{ "when": "as said, e.g. tomorrow after 4 pm", "date": "YYYY-MM-DD" or null }`, with
+    the date worked out from the call date when it's clear. `null` when neither happened, or when a
+    meeting was fixed instead. Required. It feeds the executive's follow-up list.
 - **Feedback:**
   - 1–2 strengths and 1–2 fixes, each with an exact quote and its timestamp.
   - Each fix has a `betterLine` the executive could actually say, in natural Hinglish in Roman script.

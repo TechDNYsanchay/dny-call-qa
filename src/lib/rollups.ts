@@ -93,6 +93,13 @@ export interface PersonRollup {
   missed: { id: string; question: string; count: number }[];
 }
 
+/** The period's best call to learn from: the highest score that isn't Red, then the client talking most. */
+export function bestCall(calls: CallRecord[]): CallRecord | null {
+  const good = calls.filter((c) => c.final && c.final.band !== "red");
+  good.sort((a, b) => b.final!.score - a.final!.score || (b.metrics?.clientShare ?? 0) - (a.metrics?.clientShare ?? 0) || a.startedAt.localeCompare(b.startedAt));
+  return good[0] ?? null;
+}
+
 export interface Rollup {
   period: Period;
   people: PersonRollup[];
@@ -109,6 +116,8 @@ export interface Rollup {
   missed: { id: string; question: string; count: number }[];
   reviews: { agreed: number; corrected: number };
   funnel: Funnel;
+  /** "Call of the week" (or month), shared with the whole team. */
+  callOfPeriod: CallRecord | null;
 }
 
 /**
@@ -252,5 +261,6 @@ export function rollup(
       corrected: scored.filter((c) => c.review?.verdict === "corrected").length,
     },
     funnel: funnel(calls),
+    callOfPeriod: bestCall(calls),
   };
 }
