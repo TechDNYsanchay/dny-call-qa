@@ -17,6 +17,7 @@ import type { Stream } from "@/lib/scoring/call-sheets";
 import type { FirstCallCapture } from "@/lib/scoring/schema";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
 import type { CallDirection } from "@/lib/callyzer";
+import { buildBriefing, type Briefing } from "@/lib/briefing";
 import type { CallRecord, LeadStatus, Person, PersonRole } from "./types";
 
 export type { CallRecord, LeadStatus, Person } from "./types";
@@ -444,6 +445,7 @@ export const pipelineReads = {
   callsBetween: (fromDay: string, toDay: string) => readCallsBetween(supabaseAdmin(), fromDay, toDay),
   previousDayAverages: (day: string) => readPreviousDayAverages(supabaseAdmin(), day),
   secondOpinionFlags: () => readSecondOpinionFlags(supabaseAdmin()),
+  briefings: (leadIds: string[]) => readBriefings(leadIds),
 };
 
 export interface Calibration {
@@ -706,8 +708,11 @@ export interface LeadDetail {
 
 /** One lead with every call to it that the viewer may see. */
 export async function getLead(id: string): Promise<LeadDetail | null> {
+  return readLead(await supabaseUser(), id);
+}
+
+async function readLead(supabase: Client, id: string): Promise<LeadDetail | null> {
   if (!UUID.test(id)) return null;
-  const supabase = await supabaseUser();
   const { data, error } = await supabase
     .from("leads")
     .select("id, name, phone, email, status, stage, owner_id, value_inr, notes, status_updated_at, first_call_capture")
@@ -732,6 +737,30 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     capture: capture.success ? capture.data : null,
     calls: (calls as unknown as CallRow[]).map(toCallRecord),
   };
+}
+
+/**
+ * The vision-call brief for a lead. Founders, managers and admins see any; consultants see leads
+ * with a meeting fixed (they prepare for it before they have any call with the lead, which the
+ * access rules would hide); executives see their own leads, as on the lead page.
+ */
+export async function getBriefing(leadId: string, me: Me): Promise<Briefing | null> {
+  const consultant = me.role === "consultant";
+  const lead = await readLead(me.canSeeAll || consultant ? supabaseAdmin() : await supabaseUser(), leadId);
+  if (!lead || (consultant && !me.canSeeAll && !lead.capture?.vcDateTime)) return null;
+  return briefingOf(lead);
+}
+
+function briefingOf(lead: LeadDetail): Briefing {
+  const firstCall = lead.calls.find((c) => c.stream === "first_call" && c.final) ?? null;
+  return buildBriefing({ leadId: lead.id, name: lead.name, phone: lead.phone, ownerId: lead.ownerId, capture: lead.capture, firstCall });
+}
+
+/** For the morning email: the briefs for meetings on `day`, read with the secret key (no viewer). */
+async function readBriefings(leadIds: string[]): Promise<Briefing[]> {
+  const db = supabaseAdmin();
+  const leads = await Promise.all(leadIds.map((id) => readLead(db, id)));
+  return leads.filter((l): l is LeadDetail => l !== null).map(briefingOf);
 }
 
 export interface ExampleClip {

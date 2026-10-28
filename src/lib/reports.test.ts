@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CALLS, PEOPLE, PREVIOUS_DAYS } from "@/lib/data/sample-data";
 import { CallResultSchema } from "@/lib/scoring/schema";
-import { personDayReport, teamSummary } from "./reports";
+import { consentStated, personDayReport, teamSummary } from "./reports";
 
 const calls = [...CALLS].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 const getCall = (id: string) => CALLS.find((c) => c.id === id);
@@ -75,5 +75,23 @@ describe("missed questions", () => {
     ];
     const report = personDayReport(getPerson(call.personId)!, [call]);
     expect(report.missedQuestions.map((m) => m.id)).toEqual(["fc07"]);
+  });
+});
+
+describe("recording consent", () => {
+  const scored = CALLS.filter((c) => c.final);
+  const firstCalls = scored.filter((c) => c.result?.stream === "first_call");
+  const stated = firstCalls.filter((c) => c.result?.stream === "first_call" && c.result.consent === "stated").length;
+
+  it("counts the scored first calls where the client was told the call is recorded", () => {
+    expect(consentStated(scored)).toEqual({ stated, of: firstCalls.length });
+    expect(consentStated([])).toEqual({ stated: 0, of: 0 });
+  });
+
+  it("shows on each executive's report and the team summary", () => {
+    const team = teamSummary(PEOPLE, CALLS, PREVIOUS_DAYS);
+    expect(team.consentStated).toBe(stated);
+    const exec = team.rows.find((r) => r.report.person.role === "executive")!.report;
+    expect(exec.conversion.map((c) => c.label)).toContain("Told the client the call is recorded");
   });
 });

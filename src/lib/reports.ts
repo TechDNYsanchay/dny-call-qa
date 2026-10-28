@@ -33,6 +33,12 @@ export interface PersonDayReport {
 }
 
 const byScore = (a: CallRecord, b: CallRecord) => (b.final?.score ?? 0) - (a.final?.score ?? 0);
+
+/** Scored first calls where the executive told the client the call is recorded. */
+export function consentStated(scored: CallRecord[]): { stated: number; of: number } {
+  const firstCalls = scored.filter((c) => c.result?.stream === "first_call");
+  return { stated: firstCalls.filter((c) => c.result?.stream === "first_call" && c.result.consent === "stated").length, of: firstCalls.length };
+}
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "–");
 const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
 
@@ -48,9 +54,11 @@ function conversionFor(person: Person, scored: CallRecord[]): Conversion[] {
   }
   const firstCalls = scored.flatMap((c) => (c.result?.stream === "first_call" ? [c.result.capture] : []));
   const booked = firstCalls.filter((c) => c.vcDateTime).length;
+  const consent = consentStated(scored);
   return [
     { label: "First calls scored", value: String(firstCalls.length) },
     { label: "VCs booked", value: `${booked} (${pct(booked, firstCalls.length)})` },
+    { label: "Told the client the call is recorded", value: `${consent.stated} of ${consent.of}` },
   ];
 }
 
@@ -121,6 +129,8 @@ export interface TeamSummary {
   vcsBooked: number;
   visionCalls: number;
   proposalDatesFixed: number;
+  /** Scored first calls where the client was told the call is recorded. */
+  consentStated: number;
   caseStudies: { name: string; count: number }[];
 }
 
@@ -154,6 +164,7 @@ export function teamSummary(
     vcsBooked: firstCaptures.filter((c) => c.vcDateTime).length,
     visionCalls: vcCaptures.length,
     proposalDatesFixed: vcCaptures.filter((c) => c.proposalDate).length,
+    consentStated: consentStated(scored).stated,
     caseStudies: [...caseStudyCounts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
   };
 }

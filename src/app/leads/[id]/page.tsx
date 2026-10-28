@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
-import { Avatar, CalendarIcon, Card, Loading, QualityPill, ScoreFigure, StatTile, StatusLabel } from "@/components/ui";
+import { Avatar, CalendarIcon, Card, Loading, QualityPill, ScoreFigure, StatTile, StatusLabel, WhatsAppButton } from "@/components/ui";
 import { firstCallRows } from "@/lib/capture";
 import { getLead, listPeople, requireMe, type LeadStatus } from "@/lib/data";
 import { dateFromText } from "@/lib/follow-ups";
-import { formatClock, formatDay, formatDuration, formatPhone, formatShortDay, IN_PROGRESS_LABEL, LEAD_STATUS_LABEL, NOT_SCORED_LABEL } from "@/lib/format";
+import { formatClock, formatDay, formatDuration, formatPhone, formatShortDay, IN_PROGRESS_LABEL, LEAD_STATUS_LABEL, NOT_SCORED_LABEL, toIst } from "@/lib/format";
+import { message } from "@/lib/whatsapp";
 import { LeadEditor } from "./lead-editor";
 
 export default function LeadPage({ params }: PageProps<"/leads/[id]">) {
@@ -19,6 +21,11 @@ export default function LeadPage({ params }: PageProps<"/leads/[id]">) {
 /** Where a lead goes after the first call; Lost sits outside the line. */
 const PIPELINE: LeadStatus[] = ["open", "vc_held", "proposal", "won"];
 const STEP_LABEL: Record<LeadStatus, string> = { open: "First call", vc_held: "Vision call held", proposal: "Proposal sent", won: "Won", lost: "Lost" };
+async function todayIst() {
+  await connection();
+  return toIst(new Date().toISOString()).slice(0, 10);
+}
+
 const inr = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 async function Lead({ params }: Pick<PageProps<"/leads/[id]">, "params">) {
@@ -35,6 +42,14 @@ async function Lead({ params }: Pick<PageProps<"/leads/[id]">, "params">) {
   const meeting = lead.capture?.vcDateTime ?? null;
   const meetingDate = meeting ? (lead.capture?.vcDate ?? dateFromText(meeting, latestScored?.startedAt.slice(0, 10) ?? "2026-01-01")) : null;
   const reached = PIPELINE.indexOf(lead.status);
+  const today = await todayIst();
+  // A ready WhatsApp message: confirm a meeting that's coming up, or ask for one while the lead is open.
+  const whatsapp =
+    meetingDate && meetingDate >= today
+      ? { text: message.meeting(lead.capture?.clientName ?? lead.name, meetingDate, meeting), label: "Confirm on WhatsApp" }
+      : lead.status === "open"
+        ? { text: message.bookMeeting(lead.capture?.clientName ?? lead.name), label: "WhatsApp" }
+        : null;
 
   return (
     <>
@@ -53,6 +68,12 @@ async function Lead({ params }: Pick<PageProps<"/leads/[id]">, "params">) {
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs">
+          {lead.capture && (
+            <Link href={`/leads/${lead.id}/brief`} className="inline-flex items-center rounded-md border border-border px-2.5 py-1 font-medium hover:bg-background">
+              Vision-call brief
+            </Link>
+          )}
+          {whatsapp && <WhatsAppButton phone={lead.phone} text={whatsapp.text} label={whatsapp.label} />}
           {lead.capture?.leadQuality && lead.capture.leadQuality !== "cold" && <QualityPill quality={lead.capture.leadQuality} />}
           {lead.status === "won" ? <StatusLabel band="green">Won</StatusLabel> : lead.status === "lost" ? <StatusLabel band="red">Lost</StatusLabel> : null}
         </div>

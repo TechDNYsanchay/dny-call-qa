@@ -8,6 +8,8 @@ import { formatClock, formatDay, formatDuration, formatPhone, hardFailLabel } fr
 import type { PersonDayReport, TeamSummary } from "@/lib/reports";
 import { FUNNEL_STAGES, pctOf, type Funnel, type PersonRollup, type Rollup } from "@/lib/rollups";
 import type { Band } from "@/lib/scoring/compute";
+import type { Briefing } from "@/lib/briefing";
+import { dayName, message, timeIn, whatsappLink } from "@/lib/whatsapp";
 import { EMAIL_LOGO } from "./email-logo";
 
 export interface Email {
@@ -77,7 +79,13 @@ const savedName = (m: MissedItem) => (m.name === formatPhone(m.phone) ? null : m
 function callerHtml(m: MissedItem, siteUrl: string): string {
   const name = savedName(m);
   const nameHtml = name ? (m.leadId ? `<a href="${esc(`${siteUrl}/leads/${m.leadId}`)}" style="color:#1c1c1a">${esc(name)}</a> · ` : `${esc(name)} · `) : "";
-  return `${nameHtml}<a href="tel:${esc(m.phone)}" style="color:#1c1c1a">${esc(formatPhone(m.phone))}</a>`;
+  return `${nameHtml}<a href="tel:${esc(m.phone)}" style="color:#1c1c1a">${esc(formatPhone(m.phone))}</a>${whatsappHtml(m.phone, message.missedCall())}`;
+}
+
+/** " · WhatsApp", a link that opens WhatsApp with the message ready; nothing for a number that can't be messaged. */
+function whatsappHtml(phone: string | null | undefined, text: string): string {
+  const href = whatsappLink(phone, text);
+  return href ? ` · <a href="${esc(href)}" style="color:#1c1c1a">WhatsApp</a>` : "";
 }
 
 /** The 8 am email's "today's follow-ups": missed calls, call-backs, meetings, leads to book. */
@@ -94,9 +102,15 @@ function followUpsHtml(f: FollowUps, today: string, siteUrl: string): string {
       "Missed calls to return",
       f.missed.map((m) => listItem(`${callerHtml(m, siteUrl)} <span style="${MUTED}">· missed ${m.count === 1 ? "" : `${m.count}× · `}since ${when(m.firstAt, today)}</span>`)),
     ),
-    group("Call-backs promised", f.callBacks.map((c) => listItem(`${leadLink(c.leadId, c.name)} · ${esc(c.when ?? "")} <span style="${MUTED}">· ${day(c.date)}</span>`))),
-    group("Meetings coming up", f.meetings.map((c) => listItem(`${leadLink(c.leadId, c.name)} · ${esc(c.when ?? "")}`))),
-    group("Hot and warm leads with no meeting yet", f.toBook.map((c) => listItem(`${leadLink(c.leadId, c.name)}${c.city ? ` · ${esc(c.city)}` : ""} <span style="${MUTED}">· ${c.quality ?? ""}</span>`))),
+    group(
+      "Call-backs promised",
+      f.callBacks.map((c) => listItem(`${leadLink(c.leadId, c.name)} · ${esc(c.when ?? "")} <span style="${MUTED}">· ${day(c.date)}</span>${whatsappHtml(c.phone, message.callBack(c.name, c.when))}`)),
+    ),
+    group("Meetings coming up", f.meetings.map((c) => listItem(`${leadLink(c.leadId, c.name)} · ${esc(c.when ?? "")}${whatsappHtml(c.phone, message.meeting(c.name, c.date, c.when))}`))),
+    group(
+      "Hot and warm leads with no meeting yet",
+      f.toBook.map((c) => listItem(`${leadLink(c.leadId, c.name)}${c.city ? ` · ${esc(c.city)}` : ""} <span style="${MUTED}">· ${c.quality ?? ""}</span>${whatsappHtml(c.phone, message.bookMeeting(c.name))}`)),
+    ),
     `<p style="margin:8px 0 0"><a href="${esc(`${siteUrl}/follow-ups`)}" style="color:#c23b2f">All follow-ups</a></p>`,
   ].join("");
 }
@@ -185,7 +199,14 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
   };
 }
 
-export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: string, followUps?: FollowUps, toReview: CallRecord[] = []): Email {
+export function teamSummaryEmail(
+  summary: TeamSummary,
+  day: string,
+  siteUrl: string,
+  followUps?: FollowUps,
+  toReview: CallRecord[] = [],
+  meetingsToday: Briefing[] = [],
+): Email {
   const when = shortDay(day);
   const link = (path: string) => `${siteUrl}${path}`;
   const scored = summary.rows.flatMap((r) => r.report.scored);
@@ -227,10 +248,14 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
   const topMissed = [...missed.values()].sort((a, b) => b.count - a.count).slice(0, 3);
 
   const body = [
-    `<p style="${P}">Team average ${bandHtml(average, teamBand)} · ${scored.length} calls scored · ${hardFails} with a hard fail · VCs booked: ${summary.vcsBooked} from ${summary.firstCalls} scored first calls</p>`,
+    `<p style="${P}">Team average ${bandHtml(average, teamBand)} · ${scored.length} calls scored · ${hardFails} with a hard fail · VCs booked: ${summary.vcsBooked} from ${summary.firstCalls} scored first calls${summary.firstCalls ? ` · client told the call is recorded on ${summary.consentStated} of ${summary.firstCalls}` : ""}</p>`,
     rows &&
       `<h2 style="${H2}">People</h2><table style="border-collapse:collapse;font-size:13px"><tr style="${MUTED};text-align:left"><th style="padding:0 8px 4px 0;font-weight:500">Person</th><th style="padding:0 8px 4px;font-weight:500">Scored</th><th style="padding:0 8px 4px;font-weight:500">Average</th><th style="padding:0 8px 4px;font-weight:500">Hard fails</th><th style="padding:0 0 4px 8px;font-weight:500">VCs booked</th></tr>${rows}</table>`,
     red && `<h2 style="${H2}">Red calls to review in stand-up</h2><ul style="padding-left:18px;margin:0">${red}</ul>`,
+    meetingsToday.length > 0 &&
+      `<h2 style="${H2}">Vision calls today</h2><ul style="padding-left:18px;margin:0">${meetingsToday
+        .map((b) => listItem(`${esc(b.name)}${meetingTime(b) ? ` · ${esc(meetingTime(b)!)}` : ""} <span style="${MUTED}">· ${esc(b.stage.label)}</span> · <a href="${esc(link(`/leads/${b.leadId}/brief`))}" style="color:#c23b2f">Brief</a>`))
+        .join("")}</ul>`,
     secondLook &&
       `<h2 style="${H2}">Worth a founder's look</h2><p style="${P};${MUTED}">A second, independent scoring disagreed with the first. Agree or correct on the call page.</p><ul style="padding-left:18px;margin:0">${secondLook}</ul>`,
     followUps &&
@@ -251,6 +276,44 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
   ].join("\n");
 
   return { subject, html: layout(`Team summary · ${when}`, body, { href: link(`/?day=${day}`), label: "Open the team page" }), text };
+}
+
+// ---------------------------------------------------------------------------
+// The consultant's vision-call brief, the morning of the meeting
+// ---------------------------------------------------------------------------
+
+const meetingTime = (b: Briefing) => timeIn(b.meeting.when) ?? (b.meeting.date ? null : b.meeting.when);
+
+export function briefingEmail(b: Briefing, siteUrl: string): Email {
+  const time = meetingTime(b);
+  const when = b.meeting.date ? `${dayName(b.meeting.date)}${time ? `, ${time}` : ""}` : (b.meeting.when ?? "today");
+  const brief = `${siteUrl}/leads/${b.leadId}/brief`;
+  const confirm = b.meeting.date ? whatsappLink(b.phone, message.meeting(b.name, b.meeting.date, b.meeting.when)) : null;
+  const subject = `Vision call today: ${b.name}${time ? `, ${time}` : ""}`;
+  const body = [
+    `<p style="${P}">Meeting: <b>${esc(when)}</b>${confirm ? ` · <a href="${esc(confirm)}" style="color:#1c1c1a">Confirm on WhatsApp</a>` : ""}</p>`,
+    `<h2 style="${H2}">How to run the call</h2><ol style="padding-left:18px;margin:0">${b.reminders.map((r) => listItem(esc(r))).join("")}</ol>`,
+    b.known.length &&
+      `<h2 style="${H2}">What the first call told us</h2><table style="border-collapse:collapse;font-size:13px">${b.known
+        .map(([label, value]) => `<tr><td style="padding:3px 12px 3px 0;vertical-align:top;${MUTED}">${esc(label)}</td><td style="padding:3px 0">${esc(value)}</td></tr>`)
+        .join("")}</table>`,
+    b.unknown.length && `<p style="margin:8px 0 0;${MUTED}">Not captured yet: ${esc(b.unknown.join(", "))}. Ask these on the call.</p>`,
+    `<h2 style="${H2}">Stage and package</h2><p style="${P}"><b>${esc(b.stage.label)}</b> <span style="${MUTED}">· ${esc(b.stage.why)}</span>${b.packageHint ? `<br>Likely package: ${esc(b.packageHint)}` : ""}</p>`,
+    b.firstCallGaps.length &&
+      `<h2 style="${H2}">What the first call missed</h2><ul style="padding-left:18px;margin:0">${b.firstCallGaps.map((g) => listItem(`${esc(g.question)} <span style="${MUTED}">(${g.status})</span>`)).join("")}</ul>`,
+    b.inTheirWords.length &&
+      `<h2 style="${H2}">In their words</h2>${b.inTheirWords.map((q) => quoteHtml({ quote: q.quote, at: q.at })).join("")}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const text = [
+    `Vision call: ${b.name}, ${when}`,
+    ...b.reminders.map((r, i) => `${i + 1}. ${r}`),
+    `Stage: ${b.stage.label}. ${b.stage.why}`,
+    ...(b.packageHint ? [`Likely package: ${b.packageHint}`] : []),
+    `The full brief: ${brief}`,
+  ].join("\n");
+  return { subject, html: layout(`Vision-call brief · ${b.name}`, body, { href: brief, label: "Open the full brief" }), text };
 }
 
 // ---------------------------------------------------------------------------

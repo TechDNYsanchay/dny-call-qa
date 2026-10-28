@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Band } from "@/lib/scoring/compute";
+import { whatsappLink } from "@/lib/whatsapp";
 import type { Evidence } from "@/lib/scoring/schema";
 
 const BAND_STYLE: Record<Band, { label: string; fill: string }> = {
@@ -255,6 +256,33 @@ export function CalendarIcon() {
 }
 
 /** "Download for Excel": a spreadsheet of what the page shows (CSV, which Excel opens). */
+/** Opens WhatsApp with `text` ready to edit and send to `phone`; nothing when the number can't be messaged. */
+export function WhatsAppButton({ phone, text, label = "WhatsApp" }: { phone: string | null | undefined; text: string; label?: string }) {
+  const href = whatsappLink(phone, text);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Open WhatsApp with a ready message (you can edit it before sending)"
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-background"
+    >
+      <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
+        <path
+          d="M8 2.25a5.75 5.75 0 0 0-4.98 8.62l-.77 2.88 2.95-.76A5.75 5.75 0 1 0 8 2.25Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+        />
+        <path d="M5.75 7h4.5M5.75 9.25h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
+      {label}
+    </a>
+  );
+}
+
 export function DownloadButton({ href, label = "Download for Excel" }: { href: string; label?: string }) {
   return (
     <a href={href} download className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-background">

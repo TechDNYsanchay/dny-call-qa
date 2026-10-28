@@ -4,7 +4,7 @@
 
 import "server-only";
 import { pipelineReads } from "@/lib/data";
-import { missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { briefingEmail, missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
 import { focusHit, focusLabel, focusProgress } from "@/lib/coaching";
 import { forPerson, isOverdue, type MissedItem } from "@/lib/follow-ups";
 import { alert } from "@/lib/alerts";
@@ -93,6 +93,9 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
     pipelineReads.focuses(),
     pipelineReads.secondOpinionFlags(),
   ]);
+  // Vision calls fixed for today: the consultants get the brief, the founders a list.
+  const meetingIds = followUps.meetings.filter((m) => m.date === today).map((m) => m.leadId);
+  const briefs = meetingIds.length ? await pipelineReads.briefings(meetingIds) : [];
   const earliestFocus = focuses.reduce((d, f) => (f.setAt.slice(0, 10) < d ? f.setAt.slice(0, 10) : d), day);
   const focusCalls = focuses.length ? await pipelineReads.callsBetween(earliestFocus, day) : [];
   const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
@@ -149,11 +152,20 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
 
   // Founders, managers and admins get the team summary (one copy to the test inbox while testing).
   if (calls.length > 0) {
-    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site, followUps, toReview);
+    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site, followUps, toReview, briefs);
     const readers = people.filter((p) => READER_ROLES.includes(p.role));
     const targets = testInbox ? [{ name: "test inbox", email: null }] : readers;
     if (targets.length === 0) result.skipped.push({ kind: "team", who: "founders", why: "no founder, manager or admin on the team list" });
     for (const reader of targets) await deliver("team", "team", reader.name, reader.email, email);
+  }
+
+  // Each brief goes to the consultant who owns the lead, or to every consultant when none does.
+  const consultants = people.filter((p) => p.role === "consultant");
+  for (const b of briefs) {
+    const owner = consultants.find((p) => p.id === b.ownerId);
+    const to = owner ? [owner] : consultants;
+    if (to.length === 0) result.skipped.push({ kind: "person", who: `brief for ${b.name}`, why: "no consultant on the team list" });
+    for (const c of to) await deliver("person", `brief:${b.leadId}`, c.name, c.email, briefingEmail(b, site));
   }
   return result;
 }

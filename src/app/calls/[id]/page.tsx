@@ -283,6 +283,21 @@ function ScoredCall({ call, sheet }: { call: CallRecord; sheet: { label: string;
               note="none is the aim"
             />
             <Measure label="Longest silence" value={call.metrics ? `${call.metrics.longestSilenceSec} s` : "–"} />
+            {call.result?.stream === "first_call" && (
+              <Measure
+                label="Recording consent"
+                value={
+                  call.result.consent === "stated" ? (
+                    <StatusLabel band="green">Told the client</StatusLabel>
+                  ) : call.result.consent === "declined" ? (
+                    <StatusLabel band="amber">Client declined</StatusLabel>
+                  ) : (
+                    <StatusLabel band="red">Not mentioned</StatusLabel>
+                  )
+                }
+                note="that the call is recorded"
+              />
+            )}
             {call.stream === "vision_call" && call.metrics && (
               <>
                 <Measure label="Consultant talk, first half" value={formatPct(call.metrics.agentShareFirstHalf)} />

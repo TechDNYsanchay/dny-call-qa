@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
-import { Avatar, CalendarIcon, Card, DownloadButton, Loading, PageHeader, QualityPill, StatTile, StatusLabel } from "@/components/ui";
+import { Avatar, CalendarIcon, Card, DownloadButton, Loading, PageHeader, QualityPill, StatTile, StatusLabel, WhatsAppButton } from "@/components/ui";
 import { getFollowUps, listPeople, requireMe } from "@/lib/data";
 import { followUpCount, isOverdue, MISSED_OVERDUE_HOURS, relativeDay, type LeadFollowUp, type MissedItem } from "@/lib/follow-ups";
 import { formatClock, formatPhone, formatShortDay, toIst } from "@/lib/format";
+import { message } from "@/lib/whatsapp";
 import { HandledButton } from "./handled-button";
 
 export const metadata = { title: "Follow-ups · DNY Sales Agent" };
@@ -88,6 +89,7 @@ async function FollowUpList() {
                 item={c}
                 person={person(c.personId)}
                 detail={c.when}
+                whatsapp={message.callBack(c.name, c.when)}
                 aside={
                   c.date ? (
                     late ? (
@@ -118,6 +120,8 @@ async function FollowUpList() {
               item={c}
               person={person(c.personId)}
               detail={c.when}
+              whatsapp={message.meeting(c.name, c.date, c.when)}
+              brief
               aside={
                 <span className="inline-flex items-center gap-1.5 font-medium">
                   <CalendarIcon />
@@ -140,6 +144,7 @@ async function FollowUpList() {
               item={c}
               person={person(c.personId)}
               detail={`last call ${formatShortDay(c.lastCallAt)}`}
+              whatsapp={message.bookMeeting(c.name)}
               aside={c.quality && c.quality !== "cold" ? <QualityPill quality={c.quality} /> : null}
             />
           ))}
@@ -215,13 +220,29 @@ function MissedRow({ item, overdue, nowMs, today, person }: { item: MissedItem; 
       <div className="flex items-center gap-3">
         <span className="text-xs">{overdue ? <StatusLabel band="red">Waiting {waited}</StatusLabel> : <span className="text-muted">Waiting {waited}</span>}</span>
         <CallButton phone={item.phone} />
+        <WhatsAppButton phone={item.phone} text={message.missedCall()} />
         <HandledButton callIds={item.callIds} />
       </div>
     </li>
   );
 }
 
-function LeadRow({ item, person, detail, aside }: { item: LeadFollowUp; person: string | null; detail: string | null; aside: ReactNode }) {
+function LeadRow({
+  item,
+  person,
+  detail,
+  aside,
+  whatsapp,
+  brief = false,
+}: {
+  item: LeadFollowUp;
+  person: string | null;
+  detail: string | null;
+  aside: ReactNode;
+  whatsapp: string;
+  /** A meeting: link the consultant's vision-call brief. */
+  brief?: boolean;
+}) {
   return (
     <li className={ROW}>
       <div className="flex min-w-0 items-center gap-3">
@@ -241,7 +262,13 @@ function LeadRow({ item, person, detail, aside }: { item: LeadFollowUp; person: 
       </div>
       <div className="flex items-center gap-3">
         {aside && <span className="text-xs">{aside}</span>}
+        {brief && (
+          <Link href={`/leads/${item.leadId}/brief`} className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-background">
+            Brief
+          </Link>
+        )}
         {item.phone && <CallButton phone={item.phone} />}
+        <WhatsAppButton phone={item.phone} text={whatsapp} />
       </div>
     </li>
   );

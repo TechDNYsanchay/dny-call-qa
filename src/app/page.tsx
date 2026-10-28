@@ -56,8 +56,8 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
         <DayNav path="/" day={day} first={first} latest={latest} {...around} />
       </PageHeader>
 
-      {/* Five tiles: on two columns the last one spans the row instead of sitting alone. */}
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
+      {/* Six tiles: two or three to a row, all six in one row on a wide screen. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <StatTile label="Calls scored" value={scored.length} note={`of ${calls.length} logged`} />
         <StatTile
           label="Team average"
@@ -73,6 +73,19 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
           label="Proposal dates fixed"
           value={team.proposalDatesFixed}
           note={`in ${team.visionCalls} vision call${team.visionCalls === 1 ? "" : "s"}`}
+        />
+        <StatTile
+          label="Recording consent"
+          value={
+            team.firstCalls === 0 ? (
+              <span className="text-muted">–</span>
+            ) : (
+              <StatusLabel band={team.consentStated / team.firstCalls >= 0.9 ? "green" : team.consentStated / team.firstCalls >= 0.5 ? "amber" : "red"}>
+                {team.consentStated} of {team.firstCalls}
+              </StatusLabel>
+            )
+          }
+          note="first calls where the client was told it's recorded"
         />
       </div>
 
