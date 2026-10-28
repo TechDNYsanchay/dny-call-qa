@@ -11,6 +11,7 @@ import { bestCall, weekStart } from "@/lib/rollups";
 import { addDays, formatPhone, istDayRange, toIst } from "@/lib/format";
 import type { Band, Level, NotScoredReason } from "@/lib/scoring/compute";
 import { CallResultSchema, FirstCallCaptureSchema } from "@/lib/scoring/schema";
+import { disagrees, type SecondOpinion } from "@/lib/scoring/second-opinion";
 import { activeSheet, sheetVersion, type Sheet } from "@/lib/scoring/sheets";
 import type { Stream } from "@/lib/scoring/call-sheets";
 import type { FirstCallCapture } from "@/lib/scoring/schema";
@@ -38,7 +39,7 @@ const CALL_FIELDS = `
   call_metrics ( * ),
   call_scores ( score, band, levels, hard_fails, overrides, result, reference_version_ids,
     review_verdict, reviewed_at, override_reason, ai_score, ai_band, ai_levels, ai_hard_fails, reviewer:people!call_scores_overridden_by_fkey ( full_name ),
-    dispute_comment, disputed_at, dispute_resolved_at, disputer:people!call_scores_disputed_by_fkey ( full_name ) )
+    dispute_comment, disputed_at, dispute_resolved_at, disputer:people!call_scores_disputed_by_fkey ( full_name ), second_opinion )
 `;
 
 function fail(what: string, error: { message: string }): never {
@@ -159,9 +160,18 @@ type CallRow = {
     disputed_at: string | null;
     dispute_resolved_at: string | null;
     disputer: { full_name: string } | null;
+    second_opinion: unknown;
   } | null;
   transcript_segments?: { speaker_label: string; role: string; start_sec: number; end_sec: number; text: string; topic: string | null }[];
 };
+
+/** The second opinion, compared with the AI's first score (a founder's review keeps that in ai_*). */
+function secondOpinionOf(s: NonNullable<CallRow["call_scores"]>): CallRecord["secondOpinion"] {
+  const second = s.second_opinion as SecondOpinion | null;
+  if (!second) return undefined;
+  const first = { score: Number(s.ai_score ?? s.score), hardFails: s.ai_hard_fails ?? s.hard_fails };
+  return { score: Number(second.score), band: second.band, hardFails: second.hardFails, disagrees: disagrees(first, second) };
+}
 
 function toCallRecord(row: CallRow): CallRecord {
   const parsed = row.call_scores ? CallResultSchema.safeParse(row.call_scores.result) : null;
@@ -239,6 +249,7 @@ function toCallRecord(row: CallRow): CallRecord {
             resolvedAt: row.call_scores!.dispute_resolved_at ? toIst(row.call_scores!.dispute_resolved_at) : null,
           }
         : undefined,
+    secondOpinion: scored ? secondOpinionOf(row.call_scores!) : undefined,
     leadId: row.lead_id ?? undefined,
     leadStatus: row.leads?.status,
     notScored: row.scoring_status === "not_eligible" ? ((row.not_scored_reason ?? undefined) as NotScoredReason | undefined) : undefined,
@@ -432,6 +443,7 @@ export const pipelineReads = {
   calls: (day: string) => readCalls(supabaseAdmin(), day),
   callsBetween: (fromDay: string, toDay: string) => readCallsBetween(supabaseAdmin(), fromDay, toDay),
   previousDayAverages: (day: string) => readPreviousDayAverages(supabaseAdmin(), day),
+  secondOpinionFlags: () => readSecondOpinionFlags(supabaseAdmin()),
 };
 
 export interface Calibration {
@@ -643,6 +655,21 @@ export const search = cache(async (raw: string): Promise<SearchResults> => {
   }
   return { leads, calls: (callRows as unknown as CallRow[]).map(toCallRecord), said };
 });
+
+/** Calls whose second opinion disagrees with the first score and that no founder has reviewed, oldest first. */
+async function readSecondOpinionFlags(db: Client): Promise<CallRecord[]> {
+  const { data: rows, error } = await db.from("call_scores").select("call_id").not("second_opinion", "is", null).is("reviewed_at", null).limit(50);
+  if (error) fail("second opinions", error);
+  if (rows.length === 0) return [];
+  const { data, error: callsError } = await db.from("calls").select(CALL_FIELDS).in("id", rows.map((r) => r.call_id));
+  if (callsError) fail("second-opinion calls", callsError);
+  return (data as unknown as CallRow[])
+    .map(toCallRecord)
+    .filter((c) => c.secondOpinion?.disagrees)
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+}
+
+export const listSecondOpinionFlags = cache(async (): Promise<CallRecord[]> => readSecondOpinionFlags(await supabaseUser()));
 
 /** Scores executives have disputed that no founder has reviewed yet, oldest first. */
 export const listOpenDisputes = cache(async (): Promise<CallRecord[]> => {

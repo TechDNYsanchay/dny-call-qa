@@ -167,3 +167,19 @@ describe("the logo at the top of every email", () => {
     expect(inlineImages({ subject: "x", html: "<p>no logo</p>", text: "x" })).toEqual([]);
   });
 });
+
+describe("the team email's second-opinion section", () => {
+  const summary = teamSummary(PEOPLE, calls, PREVIOUS_DAYS);
+  const flagged = calls.filter((c) => c.final).slice(0, 1).map((c) => ({ ...c, secondOpinion: { score: 40, band: "red" as const, hardFails: [], disagrees: true } }));
+
+  it("lists calls where two scorings disagreed, with both scores and a link", () => {
+    const email = teamSummaryEmail(summary, REPORT_DATE, SITE, undefined, flagged);
+    expect(email.html).toContain("Worth a founder's look");
+    expect(email.html).toContain(`${SITE}/calls/${flagged[0].id}`);
+    expect(email.text).toContain("Worth a founder's look (two scorings disagreed): 1");
+  });
+
+  it("leaves the section out when nothing disagreed", () => {
+    expect(teamSummaryEmail(summary, REPORT_DATE, SITE).html).not.toContain("Worth a founder's look");
+  });
+});

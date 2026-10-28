@@ -11,7 +11,7 @@
 // and scoring/vision-call-guide.md.
 
 import { readFileSync } from "node:fs";
-import { checkAndSave, nextReadyCallId, scoringPackage, skipCall, type Db } from "../src/lib/scoring/pipeline";
+import { checkAndSave, nextReadyCallId, nextSecondOpinionCallId, scoringPackage, skipCall, type Db } from "../src/lib/scoring/pipeline";
 import { db } from "./lib.mjs";
 
 const [command, ...args] = process.argv.slice(2);
@@ -19,7 +19,7 @@ const store = db as unknown as Db;
 
 if (command === "next") {
   const flag = args.indexOf("--call");
-  const callId = flag >= 0 ? args[flag + 1] : await nextReadyCallId(store);
+  const callId = flag >= 0 ? args[flag + 1] : args.includes("--second") ? await nextSecondOpinionCallId(store) : await nextReadyCallId(store);
   if (!callId) {
     console.log("No calls are ready for scoring.");
     process.exit(0);
@@ -33,14 +33,18 @@ if (command === "next") {
   const [callId, file] = args.filter((a) => !a.startsWith("--"));
   if (!callId || !file) throw new Error("Usage: npm run score -- save <callId> <result.json> [--dry-run]");
   const dryRun = args.includes("--dry-run");
-  const outcome = await checkAndSave(store, callId, JSON.parse(readFileSync(file, "utf8")), { dryRun });
+  const outcome = await checkAndSave(store, callId, JSON.parse(readFileSync(file, "utf8")), { dryRun, secondOpinion: args.includes("--second") });
   if (!outcome.ok) {
     console.error("The result didn't pass the checks:");
     for (const e of outcome.errors) console.error(`  ${e}`);
     process.exit(1);
   }
   console.log(`${outcome.saved ? "Saved" : "Checks passed (nothing saved)"}: ${outcome.summary}`);
+  if (outcome.secondOpinion) {
+    const s = outcome.secondOpinion;
+    console.log(`Second opinion against the first score ${s.firstScore} (${s.firstBand}): ${s.disagrees ? "they disagree; flagged for a founder's look" : "they agree"}`);
+  }
 } else {
-  console.log("Usage: npm run score -- next [--call <id>] | skip <callId> | save <callId> <result.json> [--dry-run]  (see scripts/score.mts)");
+  console.log("Usage: npm run score -- next [--call <id> | --second] | skip <callId> | save <callId> <result.json> [--dry-run] [--second]  (see scripts/score.mts)");
   process.exitCode = 1;
 }

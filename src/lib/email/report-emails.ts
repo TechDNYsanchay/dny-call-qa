@@ -185,7 +185,7 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
   };
 }
 
-export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: string, followUps?: FollowUps): Email {
+export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: string, followUps?: FollowUps, toReview: CallRecord[] = []): Email {
   const when = shortDay(day);
   const link = (path: string) => `${siteUrl}${path}`;
   const scored = summary.rows.flatMap((r) => r.report.scored);
@@ -212,6 +212,14 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
       return `<li style="margin-bottom:6px"><a href="${esc(link(`/calls/${c.id}`))}" style="color:#1c1c1a">${esc(nameOf(c))} · ${formatClock(c.startedAt)} · ${esc(c.client.name)}</a> · ${bandHtml(c.final!.score, c.final!.band)} <span style="${MUTED}">(${esc(why)})</span></li>`;
     })
     .join("");
+  // Calls where a second, independent scoring disagreed with the first: a founder's look settles them.
+  const secondLook = toReview
+    .filter((c) => c.secondOpinion && c.final)
+    .map(
+      (c) =>
+        `<li style="margin-bottom:6px"><a href="${esc(link(`/calls/${c.id}`))}" style="color:#1c1c1a">${esc(nameOf(c))} · ${esc(shortDay(c.startedAt.slice(0, 10)))} ${formatClock(c.startedAt)} · ${esc(c.client.name)}</a> · ${bandHtml(c.final!.score, c.final!.band)} <span style="${MUTED}">then</span> ${bandHtml(c.secondOpinion!.score, c.secondOpinion!.band)}</li>`,
+    )
+    .join("");
   const missed = new Map<string, { question: string; count: number }>();
   for (const { report } of summary.rows) {
     for (const m of report.missedQuestions) missed.set(m.id, { question: m.question, count: (missed.get(m.id)?.count ?? 0) + m.count });
@@ -223,6 +231,8 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
     rows &&
       `<h2 style="${H2}">People</h2><table style="border-collapse:collapse;font-size:13px"><tr style="${MUTED};text-align:left"><th style="padding:0 8px 4px 0;font-weight:500">Person</th><th style="padding:0 8px 4px;font-weight:500">Scored</th><th style="padding:0 8px 4px;font-weight:500">Average</th><th style="padding:0 8px 4px;font-weight:500">Hard fails</th><th style="padding:0 0 4px 8px;font-weight:500">VCs booked</th></tr>${rows}</table>`,
     red && `<h2 style="${H2}">Red calls to review in stand-up</h2><ul style="padding-left:18px;margin:0">${red}</ul>`,
+    secondLook &&
+      `<h2 style="${H2}">Worth a founder's look</h2><p style="${P};${MUTED}">A second, independent scoring disagreed with the first. Agree or correct on the call page.</p><ul style="padding-left:18px;margin:0">${secondLook}</ul>`,
     followUps &&
       followUpCount(followUps) > 0 &&
       `<h2 style="${H2}">Open follow-ups</h2><p style="${P}">${followUps.missed.length} missed call${followUps.missed.length === 1 ? "" : "s"} not returned · ${followUps.callBacks.length} call-back${followUps.callBacks.length === 1 ? "" : "s"} promised · ${followUps.meetings.length} meeting${followUps.meetings.length === 1 ? "" : "s"} coming up · ${followUps.toBook.length} hot or warm lead${followUps.toBook.length === 1 ? "" : "s"} with no meeting. <a href="${esc(link("/follow-ups"))}" style="color:#c23b2f">See them</a></p>`,
@@ -235,6 +245,7 @@ export function teamSummaryEmail(summary: TeamSummary, day: string, siteUrl: str
   const text = [
     `Team call QA for ${when}`,
     `Average ${bandText(average, teamBand)} · ${scored.length} scored · ${hardFails} with a hard fail`,
+    ...(toReview.length ? [`Worth a founder's look (two scorings disagreed): ${toReview.length}`] : []),
     ...summary.rows.filter((r) => r.report.calls.length).map(({ report: r }) => `${r.person.name}: ${r.scored.length}/${r.calls.length} scored, ${bandText(r.average, r.band)}`),
     `Team page: ${link(`/?day=${day}`)}`,
   ].join("\n");

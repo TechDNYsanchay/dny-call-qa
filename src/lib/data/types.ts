@@ -1,6 +1,6 @@
 import type { CallDirection } from "@/lib/callyzer";
 import type { Stream } from "@/lib/scoring/call-sheets";
-import type { FinalScore, NotScoredReason, RecordingStatus } from "@/lib/scoring/compute";
+import type { Band, FinalScore, NotScoredReason, RecordingStatus } from "@/lib/scoring/compute";
 import type { CallMetrics, SpeakerRole, Topic } from "@/lib/scoring/metrics";
 import type { CallResult } from "@/lib/scoring/schema";
 
@@ -31,6 +31,15 @@ export interface ScoreReview {
   note: string | null;
   /** What the AI gave, before any correction. */
   ai: { score: number; band: FinalScore["band"]; levels: FinalScore["levels"]; hardFails: string[] } | null;
+}
+
+/** A later run's independent score of the same call (Red or close to a band line). */
+export interface ScoreSecondOpinion {
+  score: number;
+  band: Band;
+  hardFails: string[];
+  /** More than 10 points from the AI's first score, or a hard fail only one of them found. */
+  disagrees: boolean;
 }
 
 export interface ScoreDispute {
@@ -70,6 +79,8 @@ export interface CallRecord {
   review?: ScoreReview;
   /** The executive's challenge to the score; a founder's review resolves it. */
   dispute?: ScoreDispute;
+  /** Founders see it on the call page; a disagreement flags the call until a founder reviews it. */
+  secondOpinion?: ScoreSecondOpinion;
   leadId?: string;
   /** Where the lead stands now (set on the lead page). */
   leadStatus?: LeadStatus;

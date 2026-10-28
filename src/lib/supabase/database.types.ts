@@ -208,6 +208,7 @@ export type Database = {
           rubric_version: string
           score: number
           scored_at: string
+          second_opinion: Json | null
         }
         Insert: {
           ai_band?: Database["public"]["Enums"]["score_band"] | null
@@ -232,6 +233,7 @@ export type Database = {
           rubric_version: string
           score: number
           scored_at?: string
+          second_opinion?: Json | null
         }
         Update: {
           ai_band?: Database["public"]["Enums"]["score_band"] | null
@@ -256,6 +258,7 @@ export type Database = {
           rubric_version?: string
           score?: number
           scored_at?: string
+          second_opinion?: Json | null
         }
         Relationships: [
           {

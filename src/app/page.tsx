@@ -5,7 +5,7 @@ import { DayNav } from "@/components/day-nav";
 import { Avatar, BandBadge, Card, EmptyState, Loading, PageHeader, ScoreFigure, StatTile, StatusLabel, TrendSparkline } from "@/components/ui";
 import { connection } from "next/server";
 import { focusLabel, focusProgress } from "@/lib/coaching";
-import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listActiveFocuses, listCalls, listCallsBetween, listOpenDisputes, listPeople, previousDayAverages, requireMe } from "@/lib/data";
+import { getActiveSheets, getAdjacentDays, getFirstDay, getReportDay, listActiveFocuses, listCalls, listCallsBetween, listOpenDisputes, listPeople, listSecondOpinionFlags, previousDayAverages, requireMe } from "@/lib/data";
 import { formatClock, formatDay, hardFailLabel, parseDayParam, toIst } from "@/lib/format";
 import { teamSummary } from "@/lib/reports";
 import { band, dayAverage } from "@/lib/scoring/compute";
@@ -25,13 +25,14 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const [latest, first] = await Promise.all([getReportDay(), getFirstDay()]);
   const day = requested ?? latest;
   if (!day) return <EmptyState title="Team summary" />;
-  const [people, calls, previous, around, sheets, disputes] = await Promise.all([
+  const [people, calls, previous, around, sheets, disputes, secondOpinions] = await Promise.all([
     listPeople(),
     listCalls(day),
     previousDayAverages(day),
     getAdjacentDays(day),
     getActiveSheets(),
     listOpenDisputes(),
+    listSecondOpinionFlags(),
   ]);
   const team = teamSummary(people, calls, previous, sheets.questions);
   // Each person's coaching focus and how it's going since it was set.
@@ -87,6 +88,26 @@ async function Team({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
                   <p className="text-sm text-muted">“{call.dispute!.comment}”</p>
                 </div>
                 <BandBadge score={call.final!.score} band={call.final!.band} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {secondOpinions.length > 0 && (
+        <Card title={`Worth a founder's look (${secondOpinions.length})`} className="mb-6 border-brand/50">
+          <p className="-mt-1 mb-3 text-xs text-muted">A second, independent scoring disagreed with the first. Agree or correct on the call page and it leaves this list.</p>
+          <ul className="divide-y divide-border">
+            {secondOpinions.map((call) => (
+              <li key={call.id} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                <Link href={`/calls/${call.id}`} className="min-w-0 font-medium hover:underline">
+                  {nameOf(call.personId)} · {call.client.name} · {formatDay(call.startedAt).replace(/ \d{4}$/, "")} {formatClock(call.startedAt)}
+                </Link>
+                <span className="flex items-center gap-1.5 text-xs text-muted">
+                  <BandBadge score={call.final!.score} band={call.final!.band} />
+                  then
+                  <BandBadge score={call.secondOpinion!.score} band={call.secondOpinion!.band} />
+                </span>
               </li>
             ))}
           </ul>

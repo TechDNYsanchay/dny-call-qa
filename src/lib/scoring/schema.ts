@@ -69,6 +69,8 @@ export const VISION_CALL_JUDGED_HARD_FAILS = ["fee_before_vision_stage2", "partn
 
 const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 
+const CallBackSchema = z.object({ when: z.string().min(1), date: IsoDateSchema.nullable() });
+
 export const FirstCallCaptureSchema = z.object({
   clientName: z.string().nullable(),
   city: z.string().nullable(),
@@ -100,7 +102,7 @@ export const FirstCallCaptureSchema = z.object({
   /** The fixed meeting's date (YYYY-MM-DD), for the follow-up list. Results before 27 Oct 2026 don't have it. */
   vcDate: IsoDateSchema.nullable().optional(),
   /** DNY promised to call back, or the client asked to be called back: when, as said, and the date if known. */
-  callBack: z.object({ when: z.string().min(1), date: IsoDateSchema.nullable() }).nullable().optional(),
+  callBack: CallBackSchema.nullable().optional(),
   caseStudiesMentioned: z.array(z.string()),
 });
 
@@ -167,6 +169,13 @@ export const VisionCallResultSchema = z.object({
 });
 
 export const CallResultSchema = z.discriminatedUnion("stream", [FirstCallResultSchema, VisionCallResultSchema]);
+
+/** What the scorer sends for a new first call: the follow-up fields older stored results lack are required. */
+export const FirstCallSubmitSchema = FirstCallResultSchema.extend({
+  capture: FirstCallCaptureSchema.extend({ vcDate: IsoDateSchema.nullable(), callBack: CallBackSchema.nullable() }),
+});
+/** The save check parses new results with this; stored results are read with CallResultSchema. */
+export const CallSubmitSchema = z.discriminatedUnion("stream", [FirstCallSubmitSchema, VisionCallResultSchema]);
 
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type FirstCallCapture = z.infer<typeof FirstCallCaptureSchema>;

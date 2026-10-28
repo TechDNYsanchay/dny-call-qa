@@ -15,13 +15,21 @@ through the scoring API (`/api/scoring/next`, `save?callId=…&dryRun=1`, `save?
 
 1. Get the next call. `call.stream` is `vision_call`; `call.lead.firstCallNotes` holds what the first
    call already captured (null when there was no first call on record).
-2. Write the result as JSON in the shape below (`VisionCallResultSchema` in `src/lib/scoring/schema.ts`).
+2. Write the result as JSON in the exact shape of the call's `resultFormat`: `resultFormat.schema`
+   is the JSON Schema the check accepts (every field is required; use null where it allows null),
+   and `resultFormat.example` is a complete valid result from another call. Copy the example's
+   shape, never its content.
 3. Dry-run it. The check covers the schema, every expected question, speaker labels, topic tags and
    that every quote is in the transcript. It returns the score, the client talk share and, under
    `vision`, the consultant's talk share (first half and overall), service talk as a share of the
    consultant's talk, and minutes of DNY credentials. Fix and repeat until it passes.
 4. Make any percentage or minutes you mention in a reason match the dry run.
 5. Save it.
+
+**Second opinions.** Calls that are Red or within 5 points of a band line get scored a second time by
+a later run (`/api/scoring/next?second=1`, then `save?…&second=1`; by hand `--second`). The first
+score isn't shown: score the call from scratch exactly as above. The first score stands; if the two
+differ by more than 10 points or on a hard fail, the call is flagged for a founder's look.
 
 ## Not a vision call
 
@@ -157,6 +165,15 @@ topic when the conversation switches for about 30 seconds or more; cover the who
   - Each fix has a `betterLine` the consultant could actually say, in the call's language (English,
     or natural Hinglish in Roman script).
   - `tomorrow` is one line with **one** behaviour to change, the most important one. Never a list.
+
+## Founders' reviews
+
+`calibration` in each call's package holds the founders' recent reviews of this kind of call: the
+areas they scored differently from the AI (with the AI's original reason), the hard fails they added
+or removed, and their note. This is how DNY judges. When this call has the same kind of moment,
+judge it the way the founders did, and say so in that area's reason. The guide's fixed rules (the
+measured limits and the hard-fail definitions) still apply; if a review seems to contradict one,
+follow the guide and mention it in your report.
 
 ## Guardrails (brief section 7)
 

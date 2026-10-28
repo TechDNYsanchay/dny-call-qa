@@ -84,13 +84,14 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
   // Follow-ups are as of now (the morning the email goes out), not the report day.
   const today = toIst(new Date().toISOString()).slice(0, 10);
-  const [people, calls, previous, sheets, followUps, focuses] = await Promise.all([
+  const [people, calls, previous, sheets, followUps, focuses, toReview] = await Promise.all([
     pipelineReads.people(),
     pipelineReads.calls(day),
     pipelineReads.previousDayAverages(day),
     pipelineReads.activeSheets(),
     pipelineReads.followUps(today),
     pipelineReads.focuses(),
+    pipelineReads.secondOpinionFlags(),
   ]);
   const earliestFocus = focuses.reduce((d, f) => (f.setAt.slice(0, 10) < d ? f.setAt.slice(0, 10) : d), day);
   const focusCalls = focuses.length ? await pipelineReads.callsBetween(earliestFocus, day) : [];
@@ -148,7 +149,7 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
 
   // Founders, managers and admins get the team summary (one copy to the test inbox while testing).
   if (calls.length > 0) {
-    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site, followUps);
+    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site, followUps, toReview);
     const readers = people.filter((p) => READER_ROLES.includes(p.role));
     const targets = testInbox ? [{ name: "test inbox", email: null }] : readers;
     if (targets.length === 0) result.skipped.push({ kind: "team", who: "founders", why: "no founder, manager or admin on the team list" });

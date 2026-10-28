@@ -7,9 +7,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatTimestamp, secondsFrom, toIst } from "@/lib/format";
 import type { Database } from "@/lib/supabase/database.types";
 import type { Stream } from "./call-sheets";
+import { calibrationFor } from "./calibration";
 import { finaliseScore, type Level } from "./compute";
 import { applyTopics, computeMetrics, silences, type SpeakerRole } from "./metrics";
-import { CallResultSchema, speakerLabels } from "./schema";
+import { resultFormat } from "./result-format";
+import { CallSubmitSchema, speakerLabels } from "./schema";
+import { disagrees, SECOND_OPINION_AFTER_MIN, SECOND_OPINION_WITHIN_DAYS, wantsSecondOpinion, type SecondOpinion } from "./second-opinion";
 import { areasFor, hardFailsFor, RUBRIC_VERSION } from "./scorecards";
 import { activeSheet, expectedFrom } from "./sheets";
 
@@ -54,6 +57,24 @@ export async function nextReadyCallId(db: Db, exclude: string[] = [], stream?: S
   return data[0]?.id ?? null;
 }
 
+/**
+ * The oldest call that wants a second opinion (Red, or close to a band line), scored by an earlier
+ * run at least an hour ago, not reviewed by a founder and not given one yet.
+ */
+export async function nextSecondOpinionCallId(db: Db, exclude: string[] = [], now = Date.now()): Promise<string | null> {
+  let query = db
+    .from("call_scores")
+    .select("call_id, score, band")
+    .is("second_opinion", null)
+    .is("reviewed_at", null)
+    .lt("scored_at", new Date(now - SECOND_OPINION_AFTER_MIN * 60_000).toISOString())
+    .gt("scored_at", new Date(now - SECOND_OPINION_WITHIN_DAYS * 86_400_000).toISOString());
+  if (exclude.length) query = query.not("call_id", "in", `(${exclude.join(",")})`);
+  const { data, error } = await query.order("scored_at");
+  if (error) throw new Error(`second opinions: ${error.message}`);
+  return data.find((r) => wantsSecondOpinion(Number(r.score), r.band))?.call_id ?? null;
+}
+
 /** Everything needed to score one call: the call, measured facts, the rubric and the transcript. */
 export async function scoringPackage(db: Db, callId: string) {
   const loaded = await loadCall(db, callId);
@@ -69,6 +90,8 @@ export async function scoringPackage(db: Db, callId: string) {
   const sheet = await activeSheet(db, call.stream);
   // A vision call is judged on building on the first call, not re-asking it (brief section 2).
   const lead = call.stream === "vision_call" && call.lead_id ? await leadNotes(db, call.lead_id) : null;
+  // How the founders have corrected this kind of call: the scorer learns DNY's judgment from it.
+  const calibration = await calibrationFor(db, call.stream);
 
   return {
     call: {
@@ -92,6 +115,8 @@ export async function scoringPackage(db: Db, callId: string) {
       questions: sheet.questions,
       hardFails: hardFailsFor(call.stream).filter((h) => !h.measured),
     },
+    resultFormat: resultFormat(call.stream),
+    calibration,
     transcript: segments.map((s) => `[${formatTimestamp(s.start_sec)}] ${s.speaker_label}: ${s.text}`),
   };
 }
@@ -111,26 +136,44 @@ interface VisionMeasures {
 }
 
 export type SaveOutcome =
-  | { ok: true; saved: boolean; score: number; band: string; hardFails: string[]; clientSharePct: number; vision?: VisionMeasures; summary: string }
+  | {
+      ok: true;
+      saved: boolean;
+      score: number;
+      band: string;
+      hardFails: string[];
+      clientSharePct: number;
+      vision?: VisionMeasures;
+      /** In second-opinion mode: the first score, and whether the two disagree enough to flag. */
+      secondOpinion?: { firstScore: number; firstBand: string; disagrees: boolean };
+      summary: string;
+    }
   | { ok: false; errors: string[] };
 
 const plain = (text: string) => text.normalize("NFC").toLowerCase().replace(/[\p{P}\p{S}]/gu, " ").replace(/\s+/g, " ").trim();
 
-/** Checks a result and, unless `dryRun`, saves the speaker roles, measurements, score and lead fields. */
-export async function checkAndSave(db: Db, callId: string, json: unknown, { dryRun }: { dryRun: boolean }): Promise<SaveOutcome> {
+/**
+ * Checks a result and, unless `dryRun`, saves the speaker roles, measurements, score and lead fields.
+ * With `secondOpinion`, the same checks, but only the score is kept, beside the first one.
+ */
+export async function checkAndSave(
+  db: Db,
+  callId: string,
+  json: unknown,
+  { dryRun, secondOpinion = false }: { dryRun: boolean; secondOpinion?: boolean },
+): Promise<SaveOutcome> {
   const loaded = await loadCall(db, callId);
   if (!loaded) return { ok: false, errors: [`No call ${callId}`] };
   const { call, segments } = loaded;
   if (call.scoring_status === "not_eligible") return { ok: false, errors: ["This call isn't eligible for scoring"] };
+  if (secondOpinion && call.scoring_status !== "scored") return { ok: false, errors: ["A second opinion needs a first score; this call hasn't been scored yet"] };
 
-  const parsed = CallResultSchema.safeParse(json);
+  const parsed = CallSubmitSchema.safeParse(json);
   if (!parsed.success) return { ok: false, errors: parsed.error.issues.slice(0, 20).map((i) => `${i.path.join(".")}: ${i.message}`) };
   const result = parsed.data;
   const errors: string[] = [];
   if (result.stream !== call.stream) errors.push(`Call is a ${call.stream}, result is a ${result.stream}`);
   if (result.stream === "first_call") {
-    if (result.capture.vcDate === undefined) errors.push("capture.vcDate is required: the fixed meeting's date as YYYY-MM-DD, or null");
-    if (result.capture.callBack === undefined) errors.push("capture.callBack is required: { when, date } if a call-back was promised or asked for, or null");
     if (result.capture.vcDateTime && result.capture.vcDate === null) errors.push("capture.vcDate must be set when vcDateTime is (work out the date from the call date)");
   }
   if (result.stream === "vision_call") {
@@ -204,6 +247,19 @@ export async function checkAndSave(db: Db, callId: string, json: unknown, { dryR
     ` · ${Object.entries(final.levels).map(([id, level]) => `${id} ${level}`).join(", ")}` +
     (final.overrides.length ? ` · ${final.overrides.join(" ")}` : "");
   const outcome = { ok: true as const, score: final.score, band: final.band, hardFails: final.hardFails, clientSharePct, ...(vision ? { vision } : {}), summary };
+
+  if (secondOpinion) {
+    const { data: first, error: firstError } = await db.from("call_scores").select("score, band, hard_fails, ai_score, ai_band, ai_hard_fails").eq("call_id", callId).single();
+    if (firstError) throw new Error(`first score: ${firstError.message}`);
+    // Compared with the AI's first score (a founder's review, if any, replaces score but keeps ai_*).
+    const firstScore = Number(first.ai_score ?? first.score);
+    const compared = { firstScore, firstBand: first.ai_band ?? first.band, disagrees: disagrees({ score: firstScore, hardFails: first.ai_hard_fails ?? first.hard_fails }, final) };
+    if (dryRun) return { ...outcome, secondOpinion: compared, saved: false };
+    const opinion: SecondOpinion = { score: final.score, band: final.band, levels: final.levels, hardFails: final.hardFails, at: new Date().toISOString() };
+    const { data: saved, error } = await db.from("call_scores").update({ second_opinion: opinion as never }).eq("call_id", callId).is("second_opinion", null).select("call_id");
+    if (error) throw new Error(`second opinion: ${error.message}`);
+    return { ...outcome, secondOpinion: compared, saved: saved.length > 0 };
+  }
   if (dryRun) return { ...outcome, saved: false };
 
   for (const label of labels) {

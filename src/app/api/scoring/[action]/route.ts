@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { connection } from "next/server";
-import { checkAndSave, nextReadyCallId, scoringPackage, skipCall } from "@/lib/scoring/pipeline";
+import { checkAndSave, nextReadyCallId, nextSecondOpinionCallId, scoringPackage, skipCall } from "@/lib/scoring/pipeline";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
 
@@ -10,7 +10,9 @@ import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
 //
 //   GET  /api/scoring/guide[?stream=vision_call]     the scoring guide (markdown): first calls, or vision calls
 //   GET  /api/scoring/next[?exclude=id,id]           { done: true } or the next call to score (call.stream says which)
+//   GET  /api/scoring/next?second=1[&exclude=…]      the next call wanting a second opinion (its first score not shown)
 //   POST /api/scoring/save?callId=<id>[&dryRun=1]    body: the result JSON -> checked, then saved
+//   POST /api/scoring/save?callId=<id>&second=1      the same, kept as the call's second opinion
 //   POST /api/scoring/skip?callId=<id>               marked "Not a sales call"
 export const maxDuration = 60;
 
@@ -30,10 +32,12 @@ export async function GET(request: Request, ctx: RouteContext<"/api/scoring/[act
   }
   if (action === "next") {
     const db = supabaseAdmin();
-    const exclude = (new URL(request.url).searchParams.get("exclude") ?? "").split(",").filter((id) => UUID.test(id));
-    const callId = await nextReadyCallId(db, exclude);
+    const params = new URL(request.url).searchParams;
+    const exclude = (params.get("exclude") ?? "").split(",").filter((id) => UUID.test(id));
+    const second = params.get("second") === "1";
+    const callId = second ? await nextSecondOpinionCallId(db, exclude) : await nextReadyCallId(db, exclude);
     if (!callId) return Response.json({ done: true });
-    return Response.json({ done: false, ...(await scoringPackage(db, callId)) });
+    return Response.json({ done: false, ...(second ? { secondOpinion: true } : {}), ...(await scoringPackage(db, callId)) });
   }
   return Response.json({ error: `Unknown action "${action}"` }, { status: 404 });
 }
@@ -50,7 +54,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/scoring/[ac
   if (action === "save") {
     const result: unknown = await request.json().catch(() => undefined);
     if (result === undefined) return Response.json({ ok: false, errors: ["The body must be the result JSON"] }, { status: 400 });
-    const outcome = await checkAndSave(supabaseAdmin(), callId, result, { dryRun: params.get("dryRun") === "1" });
+    const outcome = await checkAndSave(supabaseAdmin(), callId, result, { dryRun: params.get("dryRun") === "1", secondOpinion: params.get("second") === "1" });
     return Response.json(outcome, { status: outcome.ok ? 200 : 422 });
   }
   if (action === "skip") {

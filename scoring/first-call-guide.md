@@ -11,12 +11,20 @@ through the scoring API (`/api/scoring/next`, `save?callId=…&dryRun=1`, `save?
 
 1. Get the next call: the call, the measured facts (talk seconds per speaker label, silences), the
    rubric and the transcript as `[m:ss] label: text`.
-2. Write the result as JSON in the shape below (`FirstCallResultSchema` in `src/lib/scoring/schema.ts`).
+2. Write the result as JSON in the exact shape of the call's `resultFormat`: `resultFormat.schema`
+   is the JSON Schema the check accepts (every field is required; use null where it allows null),
+   and `resultFormat.example` is a complete valid result from another call. Copy the example's
+   shape, never its content.
 3. Dry-run it. The check covers the schema, every expected question, speaker labels, and that every
    quote is in the transcript, and returns the score and the measured client talk share. Fix and
    repeat until it passes.
 4. Make any percentage you mention in a reason match the dry run's client talk share.
 5. Save it.
+
+**Second opinions.** Calls that are Red or within 5 points of a band line get scored a second time by
+a later run (`/api/scoring/next?second=1`, then `save?…&second=1`; by hand `--second`). The first
+score isn't shown: score the call from scratch exactly as above. The first score stands; if the two
+differ by more than 10 points or on a hard fail, the call is flagged for a founder's look.
 
 ## Not a sales call
 
@@ -89,6 +97,15 @@ the sheet captures is missing, e.g. name but no email, or size but not whether i
   - 1–2 strengths and 1–2 fixes, each with an exact quote and its timestamp.
   - Each fix has a `betterLine` the executive could actually say, in natural Hinglish in Roman script.
   - `tomorrow` is one line with **one** behaviour to change, the most important one (usually the main fix). Never a list.
+
+## Founders' reviews
+
+`calibration` in each call's package holds the founders' recent reviews of this kind of call: the
+areas they scored differently from the AI (with the AI's original reason), the hard fails they added
+or removed, and their note. This is how DNY judges. When this call has the same kind of moment,
+judge it the way the founders did, and say so in that area's reason. The guide's fixed rules (the
+measured limits and the hard-fail definitions) still apply; if a review seems to contradict one,
+follow the guide and mention it in your report.
 
 ## Guardrails (brief section 7)
 

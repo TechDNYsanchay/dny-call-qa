@@ -16,6 +16,10 @@ import {
 } from "./schema";
 import { expectedQuestions } from "./call-sheets";
 import { CALLS } from "@/lib/data/sample-data";
+import { calibrationNote, type ReviewRow } from "./calibration";
+import { resultFormat } from "./result-format";
+import { disagrees, wantsSecondOpinion } from "./second-opinion";
+import { CallSubmitSchema } from "./schema";
 
 const all = (areas: readonly { id: string }[], level: Level) =>
   Object.fromEntries(areas.map((a) => [a.id, level])) as Record<string, Level>;
@@ -233,5 +237,83 @@ describe("speaker roles", () => {
   it("takes one label or several per side, for voices the transcription split in two", () => {
     expect(speakerLabels("1")).toEqual(["1"]);
     expect(speakerLabels(["2", "0"])).toEqual(["2", "0"]);
+  });
+});
+
+describe("the result format handed to the scorer", () => {
+  it("gives a worked example that the save check accepts, for both kinds of call", () => {
+    for (const stream of ["first_call", "vision_call"] as const) {
+      const format = resultFormat(stream);
+      expect(CallSubmitSchema.safeParse(format.example).success).toBe(true);
+      expect(format.example.stream).toBe(stream);
+    }
+  });
+
+  it("marks the first call's follow-up fields as required, so they aren't guessed", () => {
+    const schema = resultFormat("first_call").schema as unknown as { properties: { capture: { required: string[] } } };
+    expect(schema.properties.capture.required).toEqual(expect.arrayContaining(["vcDate", "callBack", "vcDateTime"]));
+  });
+});
+
+describe("learning from the founders' reviews", () => {
+  const fiveAll = all(FIRST_CALL_AREAS, 5);
+  const row = (over: Partial<ReviewRow>): ReviewRow => ({
+    review_verdict: "corrected",
+    override_reason: null,
+    reviewed_at: "2026-10-27T10:00:00Z",
+    score: 50,
+    ai_score: 50,
+    levels: fiveAll,
+    ai_levels: fiveAll,
+    hard_fails: [],
+    ai_hard_fails: [],
+    result: { areas: { cta: { reason: "Asked for the meeting but no slot." } } },
+    ...over,
+  });
+
+  it("keeps the areas the founders changed, with the AI's reason, the hard fails and the note", () => {
+    const note = calibrationNote(
+      row({ levels: { ...fiveAll, cta: 0 }, score: 40, ai_score: 50, hard_fails: ["no_cta_when_engaged"], override_reason: "  An ask with no day is no CTA.  " }),
+      "first_call",
+    );
+    expect(note).toEqual({
+      reviewedOn: "2026-10-27",
+      verdict: "corrected",
+      aiScore: 50,
+      foundersScore: 40,
+      changed: [{ area: "cta", ai: 5, founders: 0, aiReason: "Asked for the meeting but no slot." }],
+      hardFailsAdded: ["no_cta_when_engaged"],
+      hardFailsRemoved: [],
+      note: "An ask with no day is no CTA.",
+    });
+  });
+
+  it("keeps an agreement only when the founder explained it", () => {
+    expect(calibrationNote(row({ review_verdict: "agree" }), "first_call")).toBeNull();
+    expect(calibrationNote(row({ review_verdict: "agree", override_reason: "Right call on compliance." }), "first_call")?.note).toBe("Right call on compliance.");
+  });
+
+  it("ignores calls nobody has reviewed", () => {
+    expect(calibrationNote(row({ reviewed_at: null, review_verdict: null }), "first_call")).toBeNull();
+  });
+});
+
+describe("second opinions", () => {
+  it("go to Red calls and calls within 5 points of a band line", () => {
+    expect(wantsSecondOpinion(30, "red")).toBe(true);
+    expect(wantsSecondOpinion(62.5, "amber")).toBe(true);
+    expect(wantsSecondOpinion(57.5, "red")).toBe(true);
+    expect(wantsSecondOpinion(77.5, "amber")).toBe(true);
+    expect(wantsSecondOpinion(85, "green")).toBe(true);
+    expect(wantsSecondOpinion(70, "amber")).toBe(false);
+    expect(wantsSecondOpinion(95, "green")).toBe(false);
+  });
+
+  it("flag a disagreement of more than 10 points, or a hard fail only one scoring found", () => {
+    expect(disagrees({ score: 62.5, hardFails: [] }, { score: 57.5, hardFails: [] })).toBe(false);
+    expect(disagrees({ score: 62.5, hardFails: [] }, { score: 52.5, hardFails: [] })).toBe(false);
+    expect(disagrees({ score: 62.5, hardFails: [] }, { score: 50, hardFails: [] })).toBe(true);
+    expect(disagrees({ score: 70, hardFails: ["fee_or_package_quoted"] }, { score: 70, hardFails: [] })).toBe(true);
+    expect(disagrees({ score: 70, hardFails: ["a", "b"] }, { score: 72.5, hardFails: ["b", "a"] })).toBe(false);
   });
 });

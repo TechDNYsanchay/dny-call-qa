@@ -96,6 +96,7 @@ async function CallDetail({ params, searchParams }: PageProps<"/calls/[id]">) {
 
       {call.dispute && <DisputeBanner call={call} mine={call.personId === me.id} />}
       {call.review && <ReviewBanner call={call} />}
+      {call.secondOpinion && me.canSeeAll && <SecondOpinionBanner call={call} />}
       {call.final && call.result ? <ScoredCall call={call} sheet={await getCallSheet(call.stream, call.sheetVersionId)} /> : null}
       {call.final && me.canSeeAll && (
         <div className="mt-6">
@@ -386,6 +387,30 @@ function DisputeBanner({ call, mine }: { call: CallRecord; mine: boolean }) {
           {mine ? "The founders have been told; their review will show here." : "Agree with the score or correct it below; either answers the dispute."}
         </p>
       )}
+    </Card>
+  );
+}
+
+/** A later run's independent score: flagged when it disagrees and no founder has reviewed the call. */
+function SecondOpinionBanner({ call }: { call: CallRecord }) {
+  const second = call.secondOpinion!;
+  const first = call.review?.ai ?? call.final!;
+  const open = second.disagrees && !call.review;
+  return (
+    <Card className={`mb-6 ${open ? "border-brand/50" : ""}`}>
+      <p className="text-sm">
+        <span className="font-medium">{open ? "⚑ Second opinion differs:" : "Second opinion:"}</span> a second, independent scoring gave{" "}
+        <BandBadge score={second.score} band={second.band} />
+        {second.disagrees ? (
+          <>
+            {" "}
+            against the first <BandBadge score={first.score} band={first.band} />
+          </>
+        ) : (
+          <span className="text-muted">, in line with the first score</span>
+        )}
+      </p>
+      {open && <p className="mt-2 text-xs text-muted">Worth a look: agree with the score or correct it below, and the flag clears.</p>}
     </Card>
   );
 }
