@@ -9,6 +9,7 @@ import type { PersonDayReport, TeamSummary } from "@/lib/reports";
 import { FUNNEL_STAGES, pctOf, type Funnel, type PersonRollup, type Rollup } from "@/lib/rollups";
 import type { Band } from "@/lib/scoring/compute";
 import type { Briefing } from "@/lib/briefing";
+import { actionState, byDue, calendarLink, clientNudgeMessage, clientRecapMessage, dueLabel, recapMailto, type MeetingAction, type MeetingRecap } from "@/lib/recap";
 import { dayName, message, timeIn, whatsappLink } from "@/lib/whatsapp";
 import { EMAIL_LOGO } from "./email-logo";
 
@@ -124,7 +125,14 @@ export interface FocusLine {
   setDay: string;
 }
 
-export function personReportEmail(report: PersonDayReport, day: string, siteUrl: string, followUps?: { items: FollowUps; today: string }, focus?: FocusLine): Email {
+export function personReportEmail(
+  report: PersonDayReport,
+  day: string,
+  siteUrl: string,
+  followUps?: { items: FollowUps; today: string },
+  focus?: FocusLine,
+  steps: MeetingAction[] = [],
+): Email {
   const { person } = report;
   const when = shortDay(day);
   const link = (path: string) => `${siteUrl}${path}`;
@@ -171,6 +179,7 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
     strengths && `<h2 style="${H2}">What went well</h2><ul style="padding-left:18px;margin:0">${strengths}</ul>`,
     fixes && `<h2 style="${H2}">Fix next</h2><ul style="padding-left:18px;margin:0">${fixes}</ul>`,
     report.tomorrow && `<h2 style="${H2}">Tomorrow's one thing</h2><p style="${P}">${esc(report.tomorrow)}</p>`,
+    steps.length > 0 && nextStepsHtml(steps, followUps?.today ?? day, siteUrl),
     followUps && followUpsHtml(followUps.items, followUps.today, siteUrl),
     (calls || othersLine) &&
       `<h2 style="${H2}">Scored calls</h2>${calls ? `<table style="border-collapse:collapse;font-size:13px">${calls}</table>` : ""}${othersLine}`,
@@ -187,6 +196,7 @@ export function personReportEmail(report: PersonDayReport, day: string, siteUrl:
     followUps && followUpCount(followUps.items)
       ? `Follow-ups: ${followUps.items.missed.length} missed calls to return, ${followUps.items.callBacks.length} call-backs, ${followUps.items.meetings.length} meetings, ${followUps.items.toBook.length} leads to book (${link("/follow-ups")})`
       : "",
+    ...steps.map((a) => `Next step: ${a.task} · ${a.client.name} · ${dueLabel(a, true) ?? "no date"}`),
     `Full report: ${link(`/people/${person.id}?day=${day}`)}`,
   ]
     .filter(Boolean)
@@ -206,6 +216,7 @@ export function teamSummaryEmail(
   followUps?: FollowUps,
   toReview: CallRecord[] = [],
   meetingsToday: Briefing[] = [],
+  overdueSteps: { action: MeetingAction; person: string }[] = [],
 ): Email {
   const when = shortDay(day);
   const link = (path: string) => `${siteUrl}${path}`;
@@ -256,6 +267,15 @@ export function teamSummaryEmail(
       `<h2 style="${H2}">Vision calls today</h2><ul style="padding-left:18px;margin:0">${meetingsToday
         .map((b) => listItem(`${esc(b.name)}${meetingTime(b) ? ` · ${esc(meetingTime(b)!)}` : ""} <span style="${MUTED}">· ${esc(b.stage.label)}</span> · <a href="${esc(link(`/leads/${b.leadId}/brief`))}" style="color:#c23b2f">Brief</a>`))
         .join("")}</ul>`,
+    overdueSteps.length > 0 &&
+      `<h2 style="${H2}">Next steps overdue</h2><p style="${P};${MUTED}">Agreed with clients on vision calls and not ticked off yet.</p><ul style="padding-left:18px;margin:0">${overdueSteps
+        .slice(0, MAX_ITEMS)
+        .map(({ action: a, person }) =>
+          listItem(
+            `${esc(a.task)} · <a href="${esc(link(`/calls/${a.callId}/recap`))}" style="color:#1c1c1a">${esc(a.client.name)}</a> <span style="${MUTED}">· ${esc(person)} · was due ${esc(shortDay(a.due!))}</span>`,
+          ),
+        )
+        .join("")}${overdueSteps.length > MAX_ITEMS ? listItem(`<span style="${MUTED}">and ${overdueSteps.length - MAX_ITEMS} more</span>`) : ""}</ul>`,
     secondLook &&
       `<h2 style="${H2}">Worth a founder's look</h2><p style="${P};${MUTED}">A second, independent scoring disagreed with the first. Agree or correct on the call page.</p><ul style="padding-left:18px;margin:0">${secondLook}</ul>`,
     followUps &&
@@ -271,6 +291,7 @@ export function teamSummaryEmail(
     `Team call QA for ${when}`,
     `Average ${bandText(average, teamBand)} · ${scored.length} scored · ${hardFails} with a hard fail`,
     ...(toReview.length ? [`Worth a founder's look (two scorings disagreed): ${toReview.length}`] : []),
+    ...(overdueSteps.length ? [`Next steps overdue from vision calls: ${overdueSteps.length}`] : []),
     ...summary.rows.filter((r) => r.report.calls.length).map(({ report: r }) => `${r.person.name}: ${r.scored.length}/${r.calls.length} scored, ${bandText(r.average, r.band)}`),
     `Team page: ${link(`/?day=${day}`)}`,
   ].join("\n");
@@ -314,6 +335,97 @@ export function briefingEmail(b: Briefing, siteUrl: string): Email {
     `The full brief: ${brief}`,
   ].join("\n");
   return { subject, html: layout(`Vision-call brief · ${b.name}`, body, { href: brief, label: "Open the full brief" }), text };
+}
+
+// ---------------------------------------------------------------------------
+// After a vision call: the recap, the same day, and the next steps in the morning email
+// ---------------------------------------------------------------------------
+
+const BUTTON_HTML = "display:inline-block;padding:7px 12px;border:1px solid #e5e4df;border-radius:6px;color:#1c1c1a;text-decoration:none;font-weight:600;font-size:13px";
+
+function stepHtml(a: MeetingAction, today: string, siteUrl: string, withClient: boolean): string {
+  const state = actionState(a, today);
+  const due = dueLabel(a, true);
+  const dueHtml =
+    state === "overdue"
+      ? `<span style="color:${BAND.red.colour}">${BAND.red.mark}</span> <b>overdue</b>, ${esc(due ?? "")}`
+      : state === "today"
+        ? `<span style="color:${BAND.amber.colour}">${BAND.amber.mark}</span> <b>today</b>`
+        : esc(due ?? "no date set");
+  const client = withClient ? ` · <a href="${esc(`${siteUrl}/calls/${a.callId}/recap`)}" style="color:#1c1c1a">${esc(a.client.name)}</a>` : "";
+  const calendar = calendarLink(a, a.client.name, `${siteUrl}/calls/${a.callId}/recap`);
+  const nudge = a.owner === "client" && state === "overdue" ? whatsappHtml(a.client.phone, clientNudgeMessage(a.client.name, a.task, a.meetingAt.slice(0, 10))).replace(">WhatsApp<", ">Nudge on WhatsApp<") : "";
+  return listItem(
+    `${esc(a.task)}${client} <span style="${MUTED}">·</span> ${dueHtml}${calendar && state !== "overdue" ? ` · <a href="${esc(calendar)}" style="color:#1c1c1a">Add to calendar</a>` : ""}${nudge}`,
+  );
+}
+
+/** The 8 am email's "next steps": DNY's due today or overdue, and clients' overdue (with a nudge). */
+function nextStepsHtml(steps: MeetingAction[], today: string, siteUrl: string): string {
+  const ours = steps.filter((a) => a.owner === "dny").sort(byDue);
+  const theirs = steps.filter((a) => a.owner === "client").sort(byDue);
+  return [
+    `<h2 style="${H2}">Next steps from your meetings</h2>`,
+    ours.length ? `<ul style="padding-left:18px;margin:0">${ours.map((a) => stepHtml(a, today, siteUrl, true)).join("")}</ul>` : "",
+    theirs.length
+      ? `<p style="margin:12px 0 4px;font-weight:600">Waiting on clients</p><ul style="padding-left:18px;margin:0">${theirs.map((a) => stepHtml(a, today, siteUrl, true)).join("")}</ul>`
+      : "",
+    `<p style="margin:8px 0 0"><a href="${esc(`${siteUrl}/follow-ups`)}" style="color:#c23b2f">Tick them off on Follow-ups</a></p>`,
+  ].join("");
+}
+
+/** For a consultant with steps due but no calls the day before (so no daily report). */
+export function nextStepsEmail(personName: string, steps: MeetingAction[], today: string, siteUrl: string): Email {
+  const ours = steps.filter((a) => a.owner === "dny");
+  const late = ours.filter((a) => actionState(a, today) === "overdue").length;
+  const subject = ours.length
+    ? `${ours.length} next step${ours.length === 1 ? "" : "s"} due${late ? `, ${late} overdue` : " today"}`
+    : `${steps.length} client${steps.length === 1 ? "" : "s"} to nudge`;
+  const text = [`${personName}: ${subject}`, ...steps.map((a) => `${a.task} · ${a.client.name} · ${dueLabel(a, true) ?? "no date"}`), `Follow-ups: ${siteUrl}/follow-ups`].join("\n");
+  return { subject, html: layout(subject, nextStepsHtml(steps, today, siteUrl).replace(/^<h2[^>]*>.*?<\/h2>/, ""), { href: `${siteUrl}/follow-ups`, label: "Open follow-ups" }), text };
+}
+
+/**
+ * The same day as the meeting: the consultant's recap, with each step one tap from their
+ * calendar, and the client's recap one tap from WhatsApp or email.
+ */
+export function meetingRecapEmail(r: MeetingRecap, siteUrl: string, today: string): Email {
+  const page = `${siteUrl}/calls/${r.callId}/recap`;
+  const ours = r.actions.filter((a) => a.owner === "dny");
+  const theirs = r.actions.filter((a) => a.owner === "client");
+  const next = ours.filter((a) => a.due).sort(byDue)[0];
+  const subject = `Next steps: ${r.client.name}${next ? ` · ${next.task}${next.kind === "review_call" ? " on" : ""} ${dueLabel(next, true)}` : ""}`;
+  const message = clientRecapMessage(r.client.name, r.actions, r.meetingAt.slice(0, 10), today);
+  const wa = whatsappLink(r.client.phone, message);
+  const send = [
+    wa ? `<a href="${esc(wa)}" style="${BUTTON_HTML}">Send on WhatsApp</a>` : "",
+    `<a href="${esc(recapMailto(r.client.email, message))}" style="${BUTTON_HTML}">Send by email</a>`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const body = [
+    `<p style="${P};font-size:15px">${esc(r.summary)}</p>`,
+    ours.length ? `<h2 style="${H2}">Your next steps</h2><ul style="padding-left:18px;margin:0">${ours.map((a) => stepHtml(a, today, siteUrl, false)).join("")}</ul>` : "",
+    theirs.length ? `<h2 style="${H2}">Waiting on the client</h2><ul style="padding-left:18px;margin:0">${theirs.map((a) => stepHtml(a, today, siteUrl, false)).join("")}</ul>` : "",
+    !r.actions.length ? `<p style="${P}"><b>No next steps were agreed on the call.</b> Worth a call or a WhatsApp to set one.</p>` : "",
+    `<h2 style="${H2}">Worth remembering</h2><ul style="padding-left:18px;margin:0">${r.keyPoints.map((k) => `<li style="margin-bottom:8px">${esc(k.point)}${quoteHtml(k.evidence)}</li>`).join("")}</ul>`,
+    r.openQuestions.length ? `<h2 style="${H2}">Still open</h2><ul style="padding-left:18px;margin:0">${r.openQuestions.map((q) => listItem(esc(q))).join("")}</ul>` : "",
+    `<div style="margin:20px 0 0;padding:12px 14px;background:#f4f3ef;border-radius:8px"><p style="margin:0 0 8px"><b>Send ${esc(r.client.name)} the recap</b> <span style="${MUTED}">· the next steps, ready to edit before sending</span></p>${send}</div>`,
+    r.score ? `<p style="margin:16px 0 0;${MUTED}">Call scored ${bandHtml(r.score.score, r.score.band)} · <a href="${esc(`${siteUrl}/calls/${r.callId}`)}" style="color:#6b6b65">the scorecard</a></p>` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const text = [
+    `Next steps after your call with ${r.client.name}`,
+    r.summary,
+    ...ours.map((a) => `- ${a.task} (${dueLabel(a, true) ?? "no date"})`),
+    ...theirs.map((a) => `- Client: ${a.task} (${dueLabel(a, true) ?? "no date"})`),
+    ...r.keyPoints.map((k) => `* ${k.point}`),
+    `Recap and ticks: ${page}`,
+  ].join("\n");
+  return { subject, html: layout(`Meeting recap · ${r.client.name}`, body, { href: page, label: "Open the recap and tick off steps" }), text };
 }
 
 // ---------------------------------------------------------------------------

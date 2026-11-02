@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
+import { StepList } from "@/components/meeting-recap";
 import { Avatar, CalendarIcon, Card, DownloadButton, Loading, PageHeader, QualityPill, StatTile, StatusLabel, WhatsAppButton } from "@/components/ui";
-import { getFollowUps, listPeople, requireMe } from "@/lib/data";
+import { getFollowUps, listOpenActions, listPeople, requireMe } from "@/lib/data";
 import { followUpCount, isOverdue, MISSED_OVERDUE_HOURS, relativeDay, type LeadFollowUp, type MissedItem } from "@/lib/follow-ups";
 import { formatClock, formatPhone, formatShortDay, toIst } from "@/lib/format";
+import { actionState, byDue } from "@/lib/recap";
 import { message } from "@/lib/whatsapp";
 import { HandledButton } from "./handled-button";
 
@@ -28,7 +30,7 @@ async function now() {
 async function FollowUpList() {
   const me = await requireMe();
   const { nowMs, today } = await now();
-  const [f, people] = await Promise.all([getFollowUps(me, today), listPeople()]);
+  const [f, people, actions] = await Promise.all([getFollowUps(me, today), listPeople(), listOpenActions(today)]);
   const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "Not on the team list";
   const day = (date: string) => relativeDay(date, today) ?? formatShortDay(date);
   const overdue = f.missed.filter((m) => isOverdue(m, nowMs));
@@ -37,17 +39,23 @@ async function FollowUpList() {
   const nextMeeting = f.meetings.find((m) => m.date)?.date;
   const hotToBook = f.toBook.filter((c) => c.quality === "hot").length;
   const person = (id: string) => (me.canSeeAll ? nameOf(id) : null);
+  // Next steps agreed on vision calls: DNY's own, then the client's.
+  const ours = actions.filter((a) => a.owner === "dny").sort(byDue);
+  const theirs = actions.filter((a) => a.owner === "client").sort(byDue);
+  const openSteps = actions.filter((a) => !a.doneAt);
+  const stepsDue = openSteps.filter((a) => a.owner === "dny" && ["overdue", "today"].includes(actionState(a, today)));
+  const stepsLate = stepsDue.filter((a) => actionState(a, today) === "overdue").length;
 
   return (
     <>
       <PageHeader
         title={me.canSeeAll ? "Follow-ups" : "My follow-ups"}
-        subtitle={`${followUpCount(f)} to act on · updated every 15 minutes from Callyzer and each night's scoring`}
+        subtitle={`${followUpCount(f) + openSteps.length} to act on · updated every 15 minutes from Callyzer and through the day's scoring`}
       >
         <DownloadButton href="/api/export/follow-ups" />
       </PageHeader>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile
           label="Missed calls to return"
           value={overdue.length ? <StatusLabel band="red">{f.missed.length}</StatusLabel> : f.missed.length}
@@ -60,6 +68,13 @@ async function FollowUpList() {
         />
         <StatTile label="Meetings coming up" value={f.meetings.length} note={nextMeeting ? `next: ${day(nextMeeting)}` : "booked on first calls"} />
         <StatTile label="Leads to book" value={f.toBook.length} note={`${hotToBook} hot · last 14 days`} />
+        <div className="col-span-2 lg:col-span-1">
+          <StatTile
+            label="Meeting next steps"
+            value={stepsLate ? <StatusLabel band="red">{openSteps.length}</StatusLabel> : stepsDue.length ? <StatusLabel band="amber">{openSteps.length}</StatusLabel> : openSteps.length}
+            note={stepsDue.length ? `${stepsDue.length} of ours due today or earlier` : "agreed on vision calls"}
+          />
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -73,6 +88,35 @@ async function FollowUpList() {
             <MissedRow key={m.phone} item={m} overdue={isOverdue(m, nowMs)} nowMs={nowMs} today={today} person={person(m.personId)} />
           ))}
         </Section>
+
+        <Card>
+          <div className="mb-1 flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Next steps from vision calls</h2>
+            <span className="rounded-full border border-border px-2 py-px text-xs tabular-nums text-muted">{openSteps.length}</span>
+          </div>
+          <p className="mb-3 max-w-3xl text-xs text-muted">
+            What was agreed at the end of each meeting, from the recording, the same day. Tick a step when it is done; ticking off the proposal moves the lead to
+            “Proposal sent”. Steps ticked today stay here until tomorrow.
+          </p>
+          {actions.length === 0 ? (
+            <p className="py-2 text-sm text-muted">Nothing open. Next steps appear here once a vision call is scored.</p>
+          ) : (
+            <div className="space-y-4">
+              {ours.length > 0 && (
+                <div>
+                  <h3 className="mb-1 text-2xs font-semibold uppercase tracking-wider text-muted">DNY to do</h3>
+                  <StepList actions={ours} today={today} viewer={me} context personName={person} />
+                </div>
+              )}
+              {theirs.length > 0 && (
+                <div>
+                  <h3 className="mb-1 text-2xs font-semibold uppercase tracking-wider text-muted">Waiting on clients</h3>
+                  <StepList actions={theirs} today={today} viewer={me} context personName={person} />
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
 
         <Section
           title="Call-backs promised"

@@ -4,14 +4,14 @@
 // numbers can't drift with the prompt.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatTimestamp, secondsFrom, toIst } from "@/lib/format";
+import { addDays, formatTimestamp, secondsFrom, toIst } from "@/lib/format";
 import type { Database } from "@/lib/supabase/database.types";
 import type { Stream } from "./call-sheets";
 import { calibrationFor } from "./calibration";
 import { finaliseScore, type Level } from "./compute";
 import { applyTopics, computeMetrics, silences, type SpeakerRole } from "./metrics";
 import { resultFormat } from "./result-format";
-import { CallSubmitSchema, speakerLabels } from "./schema";
+import { CallSubmitSchema, speakerLabels, type RecapAction, type VisionCallSubmit } from "./schema";
 import { disagrees, SECOND_OPINION_AFTER_MIN, SECOND_OPINION_WITHIN_DAYS, wantsSecondOpinion, type SecondOpinion } from "./second-opinion";
 import { areasFor, hardFailsFor, RUBRIC_VERSION } from "./scorecards";
 import { activeSheet, expectedFrom } from "./sheets";
@@ -193,6 +193,7 @@ export async function checkAndSave(
     if (result.hardFails.some((h) => h.id === "proposal_without_date") && result.capture.proposalDate) {
       errors.push("A proposal_without_date hard fail can't have a capture.proposalDate; one of them is wrong");
     }
+    errors.push(...recapErrors(result, toIst(call.started_at).slice(0, 10)));
   }
 
   const labels = new Set(segments.map((s) => s.speaker_label));
@@ -216,6 +217,7 @@ export async function checkAndSave(
     ...result.hardFails.flatMap((h) => h.evidence),
     ...result.feedback.strengths.map((f) => f.evidence),
     ...result.feedback.fixes.map((f) => f.evidence),
+    ...(result.stream === "vision_call" ? [...result.recap.actions.map((a) => a.evidence), ...result.recap.keyPoints.map((k) => k.evidence)] : []),
   ];
   for (const e of evidence) {
     if (!transcriptText.includes(plain(e.quote))) errors.push(`Quote isn't in the transcript (copy the words exactly): [${e.at}] ${e.quote}`);
@@ -295,7 +297,58 @@ export async function checkAndSave(
     const { error } = await db.rpc("record_lead_capture", { p_lead_id: call.lead_id, p_stream: call.stream, p_capture: result.capture as never });
     if (error) throw new Error(`lead capture: ${error.message}`);
   }
+  if (result.stream === "vision_call") await saveMeetingActions(db, callId, call.lead_id, result.recap.actions);
   return { ...outcome, saved: true };
+}
+
+/** The recap's dates are real and agree with the proposal and review dates in the capture. */
+export function recapErrors(result: VisionCallSubmit, callDay: string): string[] {
+  const errors: string[] = [];
+  const latest = addDays(callDay, 180);
+  result.recap.actions.forEach((a, i) => {
+    if (a.due && (a.due < callDay || a.due > latest)) errors.push(`recap.actions[${i}].due ${a.due} must be on or after the call (${callDay}) and within six months`);
+  });
+  const pairs = [
+    ["proposal", result.capture.proposalDate, "capture.proposalDate"],
+    ["review_call", result.capture.reviewCallDate, "capture.reviewCallDate"],
+  ] as const;
+  for (const [kind, date, field] of pairs) {
+    const actions = result.recap.actions.filter((a) => a.kind === kind);
+    if (date && !actions.some((a) => a.owner === "dny" && a.due === date)) errors.push(`${field} is ${date}, so recap.actions needs the DNY "${kind}" action due that day`);
+    if (!date && actions.some((a) => a.due)) errors.push(`A "${kind}" action has a due date but ${field} is null; make them agree`);
+  }
+  return errors;
+}
+
+/**
+ * Replaces the call's open next steps with the recap's. Ones already ticked done stay, and a new one
+ * with the same task as a done one isn't added again, so a re-score never undoes anyone's work.
+ */
+async function saveMeetingActions(db: Db, callId: string, leadId: string | null, actions: RecapAction[]) {
+  const { data: done, error } = await db.from("meeting_actions").select("position, task").eq("call_id", callId).not("done_at", "is", null);
+  if (error) throw new Error(`actions: ${error.message}`);
+  const { error: deleteError } = await db.from("meeting_actions").delete().eq("call_id", callId).is("done_at", null);
+  if (deleteError) throw new Error(`actions: ${deleteError.message}`);
+  const doneTasks = new Set(done.map((d) => d.task.trim().toLowerCase()));
+  const start = done.reduce((max, d) => Math.max(max, d.position + 1), 0);
+  const rows = actions
+    .filter((a) => !doneTasks.has(a.task.trim().toLowerCase()))
+    .map((a, i) => ({
+      call_id: callId,
+      lead_id: leadId,
+      position: start + i,
+      owner: a.owner,
+      kind: a.kind,
+      task: a.task,
+      due_date: a.due,
+      due_text: a.dueText,
+      quote: a.evidence.quote,
+      quote_at: a.evidence.at,
+    }));
+  if (rows.length) {
+    const { error: insertError } = await db.from("meeting_actions").insert(rows);
+    if (insertError) throw new Error(`actions: ${insertError.message}`);
+  }
 }
 
 /** Not a sales call (vendor, telecom, job applicant, personal): never scored. False if it was already scored. */

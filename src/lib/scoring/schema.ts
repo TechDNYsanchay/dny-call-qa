@@ -122,6 +122,33 @@ export const VisionCallCaptureSchema = z.object({
   partnerNeeds: z.array(z.enum(["brand", "website", "marketing", "property", "procurement", "handholding"])),
 });
 
+/**
+ * What the consultant takes away from a vision call: the next steps agreed (who does what, by when,
+ * and the line it was agreed in), the things worth remembering, and what is still open.
+ */
+export const RecapSchema = z.object({
+  /** One or two sentences: who the client is, what they want, where the deal stands. */
+  summary: z.string().min(1).max(400),
+  actions: z
+    .array(
+      z.object({
+        owner: z.enum(["dny", "client"]),
+        /** "proposal" and "review_call" match capture.proposalDate and reviewCallDate. */
+        kind: z.enum(["proposal", "review_call", "other"]),
+        /** Short and imperative: "Send the proposal", "Share the floor plan and menu ideas". */
+        task: z.string().min(1).max(160),
+        /** YYYY-MM-DD worked out from the call date; null when no day was said. */
+        due: IsoDateSchema.nullable(),
+        /** As said: "by Thursday", "tomorrow", "Saturday at 11". */
+        dueText: z.string().nullable(),
+        evidence: EvidenceSchema,
+      }),
+    )
+    .max(8),
+  keyPoints: z.array(z.object({ point: z.string().min(1).max(200), evidence: EvidenceSchema })).min(1).max(8),
+  openQuestions: z.array(z.string().min(1).max(200)).max(6),
+});
+
 export const FirstCallResultSchema = z.object({
   stream: z.literal("first_call"),
   speakerRoles: SpeakerRolesSchema,
@@ -165,6 +192,8 @@ export const VisionCallResultSchema = z.object({
   ),
   hardFails: z.array(hardFailItem(VISION_CALL_JUDGED_HARD_FAILS)),
   capture: VisionCallCaptureSchema,
+  /** Optional only for results stored before recaps; new results must have one (VisionCallSubmitSchema). */
+  recap: RecapSchema.optional(),
   feedback: FeedbackSchema,
 });
 
@@ -174,11 +203,16 @@ export const CallResultSchema = z.discriminatedUnion("stream", [FirstCallResultS
 export const FirstCallSubmitSchema = FirstCallResultSchema.extend({
   capture: FirstCallCaptureSchema.extend({ vcDate: IsoDateSchema.nullable(), callBack: CallBackSchema.nullable() }),
 });
+/** What the scorer sends for a new vision call: the recap is required. */
+export const VisionCallSubmitSchema = VisionCallResultSchema.extend({ recap: RecapSchema });
 /** The save check parses new results with this; stored results are read with CallResultSchema. */
-export const CallSubmitSchema = z.discriminatedUnion("stream", [FirstCallSubmitSchema, VisionCallResultSchema]);
+export const CallSubmitSchema = z.discriminatedUnion("stream", [FirstCallSubmitSchema, VisionCallSubmitSchema]);
 
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type FirstCallCapture = z.infer<typeof FirstCallCaptureSchema>;
 export type FirstCallResult = z.infer<typeof FirstCallResultSchema>;
 export type VisionCallResult = z.infer<typeof VisionCallResultSchema>;
+export type VisionCallSubmit = z.infer<typeof VisionCallSubmitSchema>;
+export type Recap = z.infer<typeof RecapSchema>;
+export type RecapAction = Recap["actions"][number];
 export type CallResult = z.infer<typeof CallResultSchema>;

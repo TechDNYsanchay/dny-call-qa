@@ -385,6 +385,27 @@ const kabirVc: VisionCallResult = {
     founderRoundTwo: true,
     partnerNeeds: ["brand"],
   },
+  recap: {
+    summary: "Arjun wants 3 outlets in Pune and 1 in Mumbai within three years on a ₹1.2 Cr budget; leaning Stage 2. Proposal by 24 Oct, review call on 27 Oct at 4 pm with a founder joining.",
+    actions: [
+      { owner: "dny", kind: "proposal", task: "Send the proposal", due: "2026-10-24", dueText: "Friday the 24th", evidence: ev("49:30", "agent", "Proposal by Friday the 24th") },
+      {
+        owner: "dny",
+        kind: "review_call",
+        task: "Hold the review call, with a founder joining",
+        due: "2026-10-27",
+        dueText: "Monday the 27th at 4",
+        evidence: ev("49:30", "agent", "review call Monday the 27th at 4, and a founder will join that one"),
+      },
+    ],
+    keyPoints: [
+      { point: "Expects about ₹35 L a month per outlet once settled", evidence: ev("15:20", "client", "Roughly 35 lakh a month per outlet, once settled.") },
+      { point: "Capex of ₹1.2 Cr including working capital", evidence: ev("27:40", "client", "1.2 crore including working capital.") },
+      { point: "Worried about weekday footfall, food cost and finding a GM", evidence: ev("18:40", "agent", "So the three things worrying you are weekday footfall, food cost and finding a GM") },
+      { point: "Wants help with branding too (after the DNY deal closes)", evidence: ev("47:00", "client", "Branding ke liye bhi help chahiye.") },
+    ],
+    openQuestions: ["Which agencies are already hired (interior, architect)?", "Who will run the outlets day to day?"],
+  },
   feedback: {
     strengths: [
       { text: "Spent the first nine minutes on the client's story before any DNY talk.", evidence: ev("0:45", "agent", "Arjun, before anything about us — what made you want to build a restaurant brand now?") },

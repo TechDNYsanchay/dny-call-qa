@@ -18,6 +18,7 @@ import type { FirstCallCapture } from "@/lib/scoring/schema";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
 import type { CallDirection } from "@/lib/callyzer";
 import { buildBriefing, type Briefing } from "@/lib/briefing";
+import type { MeetingAction, MeetingRecap } from "@/lib/recap";
 import type { CallRecord, LeadStatus, Person, PersonRole } from "./types";
 
 export type { CallRecord, LeadStatus, Person } from "./types";
@@ -446,6 +447,9 @@ export const pipelineReads = {
   previousDayAverages: (day: string) => readPreviousDayAverages(supabaseAdmin(), day),
   secondOpinionFlags: () => readSecondOpinionFlags(supabaseAdmin()),
   briefings: (leadIds: string[]) => readBriefings(leadIds),
+  recap: (callId: string) => readRecap(supabaseAdmin(), callId),
+  openActions: () => readActions(supabaseAdmin(), { open: true }),
+  recapsToSend: (sinceIso: string) => readRecapsToSend(sinceIso),
 };
 
 export interface Calibration {
@@ -874,3 +878,136 @@ export async function listCallExamples(callId: string): Promise<{ questionId: st
 
 /** Every team phone number, so calls between colleagues aren't counted as client calls. Numbers only. */
 export const getTeamPhones = cache(async (): Promise<Set<string>> => readTeamPhones(supabaseAdmin()));
+
+// ---------------------------------------------------------------------------
+// Meeting recaps and the next steps agreed on vision calls
+// ---------------------------------------------------------------------------
+
+const ACTION_FIELDS = `
+  id, call_id, lead_id, owner, kind, task, due_date, due_text, quote, quote_at, done_at,
+  calls!inner ( person_id, started_at, client_phone ),
+  leads ( name, phone, email, first_call_capture )
+`;
+
+type LeadContact = { name: string | null; phone: string | null; email: string | null; first_call_capture: unknown } | null;
+type ActionRow = {
+  id: string;
+  call_id: string;
+  lead_id: string | null;
+  owner: MeetingAction["owner"];
+  kind: MeetingAction["kind"];
+  task: string;
+  due_date: string | null;
+  due_text: string | null;
+  quote: string | null;
+  quote_at: string | null;
+  done_at: string | null;
+  calls: { person_id: string | null; started_at: string; client_phone: string | null };
+  leads: LeadContact;
+};
+
+/** The client as the recap names them: the name they gave on the first call, the lead's name, or the number. */
+function contactOf(lead: LeadContact, callPhone: string | null): MeetingAction["client"] {
+  const spoken = (lead?.first_call_capture as { clientName?: string | null } | null)?.clientName;
+  const phone = lead?.phone ?? callPhone;
+  return { name: spoken ?? lead?.name ?? (phone ? formatPhone(phone) : "the client"), phone, email: lead?.email ?? null };
+}
+
+function toAction(r: ActionRow): MeetingAction {
+  return {
+    id: r.id,
+    callId: r.call_id,
+    leadId: r.lead_id,
+    owner: r.owner,
+    kind: r.kind,
+    task: r.task,
+    due: r.due_date,
+    dueText: r.due_text,
+    quote: r.quote,
+    quoteAt: r.quote_at,
+    doneAt: r.done_at ? toIst(r.done_at) : null,
+    personId: r.calls.person_id ?? "",
+    meetingAt: toIst(r.calls.started_at),
+    client: contactOf(r.leads, r.calls.client_phone),
+  };
+}
+
+/**
+ * Next steps, read as the viewer (founders see all; a consultant the ones from their own meetings)
+ * or with the secret key for the emails. `open` keeps the ones not done, plus those ticked off
+ * since `doneSince`, so a step ticked today stays in view, struck through.
+ */
+async function readActions(db: Client, by: { callId?: string; leadId?: string; open?: boolean; doneSince?: string }): Promise<MeetingAction[]> {
+  let query = db.from("meeting_actions").select(ACTION_FIELDS);
+  if (by.callId) query = query.eq("call_id", by.callId);
+  if (by.leadId) query = query.eq("lead_id", by.leadId);
+  if (by.open) query = by.doneSince ? query.or(`done_at.is.null,done_at.gte.${by.doneSince}`) : query.is("done_at", null);
+  const { data, error } = await query.order("position").limit(500);
+  if (error) fail("next steps", error);
+  return (data as unknown as ActionRow[]).map(toAction);
+}
+
+/** Open next steps from every meeting the viewer may see, and the ones ticked off today. */
+export async function listOpenActions(today: string): Promise<MeetingAction[]> {
+  return readActions(await supabaseUser(), { open: true, doneSince: istDayRange(today)[0] });
+}
+
+/** A lead's next steps, from all its meetings. */
+export async function listLeadActions(leadId: string): Promise<MeetingAction[]> {
+  if (!UUID.test(leadId)) return [];
+  return readActions(await supabaseUser(), { leadId });
+}
+
+/** One vision call's recap, as the viewer (row-level security hides other consultants' meetings). */
+export async function getMeetingRecap(callId: string): Promise<MeetingRecap | null> {
+  return readRecap(await supabaseUser(), callId);
+}
+
+async function readRecap(db: Client, callId: string): Promise<MeetingRecap | null> {
+  if (!UUID.test(callId)) return null;
+  const { data, error } = await db
+    .from("calls")
+    .select("id, stream, person_id, lead_id, started_at, client_phone, leads ( name, phone, email, first_call_capture ), call_scores ( score, band, result )")
+    .eq("id", callId)
+    .maybeSingle();
+  if (error) fail("recap", error);
+  const row = data as unknown as {
+    stream: Stream;
+    person_id: string | null;
+    lead_id: string | null;
+    started_at: string;
+    client_phone: string | null;
+    leads: LeadContact;
+    call_scores: { score: number; band: Band; result: unknown } | null;
+  } | null;
+  if (!row || row.stream !== "vision_call" || !row.call_scores) return null;
+  const parsed = CallResultSchema.safeParse(row.call_scores.result);
+  // Vision calls scored before recaps existed have none.
+  if (!parsed.success || parsed.data.stream !== "vision_call" || !parsed.data.recap) return null;
+  const { recap } = parsed.data;
+  return {
+    callId,
+    leadId: row.lead_id,
+    personId: row.person_id ?? "",
+    meetingAt: toIst(row.started_at),
+    client: contactOf(row.leads, row.client_phone),
+    summary: recap.summary,
+    keyPoints: recap.keyPoints,
+    openQuestions: recap.openQuestions,
+    actions: await readActions(db, { callId }),
+    score: { score: Number(row.call_scores.score), band: row.call_scores.band },
+  };
+}
+
+/** Vision calls scored since `sinceIso`, for the same-day recap email (the job skips ones already sent). */
+async function readRecapsToSend(sinceIso: string): Promise<string[]> {
+  const { data, error } = await supabaseAdmin()
+    .from("call_scores")
+    .select("call_id, calls!inner ( stream )")
+    .eq("calls.stream", "vision_call")
+    .gte("scored_at", sinceIso)
+    .order("scored_at")
+    .limit(100);
+  if (error) fail("recaps to send", error);
+  return data.map((r) => r.call_id);
+}
