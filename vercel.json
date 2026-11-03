@@ -36,10 +36,6 @@
     {
       "path": "/api/cron/missed-calls",
       "schedule": "0 4-15 * * *"
-    },
-    {
-      "path": "/api/cron/send-recaps",
-      "schedule": "15 8-21 * * *"
     }
   ]
 }

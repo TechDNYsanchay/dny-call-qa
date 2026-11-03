@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { CALLS } from "@/lib/data/sample-data";
 import type { Stream } from "./call-sheets";
-import { FirstCallSubmitSchema, VisionCallSubmitSchema, type CallResult } from "./schema";
+import { FirstCallSubmitSchema, VisionCallResultSchema, type CallResult } from "./schema";
 
 const sampleResult = (stream: Stream): CallResult => {
   const result = CALLS.find((c) => c.result?.stream === stream)?.result;
@@ -19,7 +19,7 @@ const sampleResult = (stream: Stream): CallResult => {
 export function resultFormat(stream: Stream) {
   return {
     note: "Every field in the schema is required; use null where it allows null. The example is another call's result: copy its shape, never its content (quotes and facts come from this call's transcript).",
-    schema: z.toJSONSchema(stream === "first_call" ? FirstCallSubmitSchema : VisionCallSubmitSchema),
+    schema: z.toJSONSchema(stream === "first_call" ? FirstCallSubmitSchema : VisionCallResultSchema),
     example: sampleResult(stream),
   };
 }

@@ -166,33 +166,6 @@ topic when the conversation switches for about 30 seconds or more; cover the who
     or natural Hinglish in Roman script).
   - `tomorrow` is one line with **one** behaviour to change, the most important one. Never a list.
 
-## Meeting recap
-
-The consultant reads the recap right after the call to know what to do next and what to remember,
-and the client may get the agreed next steps on WhatsApp. Write it for them, not about the score.
-
-- **`summary`:** one or two sentences: who the client is, what they want, and where the deal stands
-  (stage, the dates agreed). No judgment of the consultant here.
-- **`actions`:** only next steps actually agreed or promised on the call, never advice of your own.
-  - `owner`: `dny` for what DNY's side will do, `client` for what the client will do or send.
-  - `task`: short and imperative, in plain English: "Send the proposal", "Share the floor plan and
-    menu ideas", "Introduce the founder".
-  - `due`: `YYYY-MM-DD` worked out from the call date (IST) when a day was said; `null` when none was.
-    "Thursday" is the next Thursday after the call; when a weekday and a date disagree ("Friday the
-    24th" when the 24th is a Saturday), use the date. Never earlier than the call day.
-    `dueText`: how it was said, with the time if one was said ("by Thursday", "Saturday at 11 am").
-  - `kind`: `proposal` for the proposal promise and `review_call` for the review meeting; both must
-    match `capture.proposalDate` and `capture.reviewCallDate` (the check enforces it). Everything else
-    is `other`.
-  - `evidence`: the line where it was agreed.
-  - List DNY's actions first, in date order. At most 8.
-- **`keyPoints`:** 3 to 6 things worth remembering before the next conversation: the client's vision
-  and numbers (sales they expect, the worry number, capex), their top worries, decisions made,
-  objections and how they were answered, and personal details that matter (who decides, family in the
-  business, possession date). Each with its quote. Plain facts, no advice.
-- **`openQuestions`:** what is still unknown or unresolved that the proposal or the review call needs
-  (a mandatory question not covered, an objection left open). Empty when nothing is.
-
 ## Founders' reviews
 
 `calibration` in each call's package holds the founders' recent reviews of this kind of call: the

@@ -5,7 +5,7 @@ import { addDays, toIst } from "@/lib/format";
 import { syncCallyzer } from "@/lib/ingest/callyzer-api";
 import { syncTldv } from "@/lib/ingest/tldv";
 import { transcribePending } from "@/lib/ingest/transcribe";
-import { buildDailyReports, sendDailyReports, sendMeetingRecaps, sendMissedCallAlerts, sendRollups } from "@/lib/report-jobs";
+import { buildDailyReports, sendDailyReports, sendMissedCallAlerts, sendRollups } from "@/lib/report-jobs";
 import { monthPeriod, weekPeriod, type Period } from "@/lib/rollups";
 import { TranscriberNotConfigured } from "@/lib/transcription";
 import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
@@ -25,7 +25,6 @@ const JOBS = {
   "send-reports": "08:00 IST: send each person's QA report and the founders' summary",
   "send-rollups": "08:15 IST: on Mondays the weekly roll-up for last week, on the 1st the monthly one for last month",
   "missed-calls": "Hourly, 09:30-20:30 IST: email executives the missed client calls not returned within 2 hours",
-  "send-recaps": "Hourly, 13:45-02:45 IST: email consultants the recap of each vision call scored, if it didn't go out on saving",
 } as const;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,7 +39,6 @@ const WHAT_STOPS: Record<string, string> = {
   "send-rollups": "The weekly or monthly roll-up email may not have gone out.",
   "tldv-sync": "Vision calls from tl;dv aren't being collected.",
   "missed-calls": "Executives aren't being told about missed client calls; the Follow-ups page still lists them.",
-  "send-recaps": "Consultants aren't getting the same-day recap after vision calls; the recap and next steps are still on each call's page and on Follow-ups.",
 };
 const MAX_RANGE_DAYS = 15;
 
@@ -100,11 +98,6 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
       // ?preview=1 shows the emails without sending them or marking the calls.
       const preview = new URL(request.url).searchParams.get("preview") === "1";
       return Response.json({ job, ...(await sendMissedCallAlerts({ preview })) });
-    }
-    if (job === "send-recaps") {
-      // ?preview=1 shows the emails without sending them.
-      const preview = new URL(request.url).searchParams.get("preview") === "1";
-      return Response.json({ job, ...(await sendMeetingRecaps({ preview })) });
     }
     if (job === "tldv-sync") {
       if (!process.env.TLDV_API_KEY) return Response.json({ job, done: false, note: "TLDV_API_KEY is not set" }, { status: 202 });

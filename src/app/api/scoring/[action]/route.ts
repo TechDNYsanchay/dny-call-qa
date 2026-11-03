@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { after, connection } from "next/server";
-import { sendMeetingRecaps } from "@/lib/report-jobs";
+import { connection } from "next/server";
 import { checkAndSave, nextReadyCallId, nextSecondOpinionCallId, scoringPackage, skipCall } from "@/lib/scoring/pipeline";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
@@ -11,7 +10,6 @@ import { presentedCronSecret, secretMatches } from "@/lib/webhooks";
 //
 //   GET  /api/scoring/guide[?stream=vision_call]     the scoring guide (markdown): first calls, or vision calls
 //   GET  /api/scoring/next[?exclude=id,id]           { done: true } or the next call to score (call.stream says which)
-//   GET  /api/scoring/next?stream=vision_call        only vision calls (the daytime run, for same-day recaps)
 //   GET  /api/scoring/next?second=1[&exclude=…]      the next call wanting a second opinion (its first score not shown)
 //   POST /api/scoring/save?callId=<id>[&dryRun=1]    body: the result JSON -> checked, then saved
 //   POST /api/scoring/save?callId=<id>&second=1      the same, kept as the call's second opinion
@@ -37,8 +35,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/scoring/[act
     const params = new URL(request.url).searchParams;
     const exclude = (params.get("exclude") ?? "").split(",").filter((id) => UUID.test(id));
     const second = params.get("second") === "1";
-    const stream = params.get("stream") === "vision_call" ? "vision_call" : undefined;
-    const callId = second ? await nextSecondOpinionCallId(db, exclude) : await nextReadyCallId(db, exclude, stream);
+    const callId = second ? await nextSecondOpinionCallId(db, exclude) : await nextReadyCallId(db, exclude);
     if (!callId) return Response.json({ done: true });
     return Response.json({ done: false, ...(second ? { secondOpinion: true } : {}), ...(await scoringPackage(db, callId)) });
   }
@@ -58,10 +55,6 @@ export async function POST(request: Request, ctx: RouteContext<"/api/scoring/[ac
     const result: unknown = await request.json().catch(() => undefined);
     if (result === undefined) return Response.json({ ok: false, errors: ["The body must be the result JSON"] }, { status: 400 });
     const outcome = await checkAndSave(supabaseAdmin(), callId, result, { dryRun: params.get("dryRun") === "1", secondOpinion: params.get("second") === "1" });
-    // A vision call's recap goes to the consultant at once, after the response (the hourly job retries).
-    if ("saved" in outcome && outcome.saved && (result as { stream?: unknown }).stream === "vision_call" && params.get("second") !== "1") {
-      after(() => sendMeetingRecaps().catch((error) => console.error("recap email:", error)));
-    }
     return Response.json(outcome, { status: outcome.ok ? 200 : 422 });
   }
   if (action === "skip") {

@@ -4,23 +4,12 @@
 
 import "server-only";
 import { pipelineReads } from "@/lib/data";
-import {
-  briefingEmail,
-  meetingRecapEmail,
-  missedCallsEmail,
-  nextStepsEmail,
-  personReportEmail,
-  personRollupEmail,
-  teamRollupEmail,
-  teamSummaryEmail,
-  type Email,
-} from "@/lib/email/report-emails";
+import { briefingEmail, missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
 import { focusHit, focusLabel, focusProgress } from "@/lib/coaching";
 import { forPerson, isOverdue, type MissedItem } from "@/lib/follow-ups";
 import { alert } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email/send";
 import { istDayRange, toIst } from "@/lib/format";
-import { actionState, type MeetingAction } from "@/lib/recap";
 import { personDayReport, teamSummary } from "@/lib/reports";
 import { rollup, type Period } from "@/lib/rollups";
 import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
@@ -95,7 +84,7 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
   // Follow-ups are as of now (the morning the email goes out), not the report day.
   const today = toIst(new Date().toISOString()).slice(0, 10);
-  const [people, calls, previous, sheets, followUps, focuses, toReview, openSteps] = await Promise.all([
+  const [people, calls, previous, sheets, followUps, focuses, toReview] = await Promise.all([
     pipelineReads.people(),
     pipelineReads.calls(day),
     pipelineReads.previousDayAverages(day),
@@ -103,17 +92,7 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
     pipelineReads.followUps(today),
     pipelineReads.focuses(),
     pipelineReads.secondOpinionFlags(),
-    pipelineReads.openActions(),
   ]);
-  // Next steps from vision calls worth a word this morning: ours due today or late, clients' late.
-  const stepsFor = (personId: string): MeetingAction[] =>
-    openSteps.filter((a) => {
-      const state = actionState(a, today);
-      return a.personId === personId && (state === "overdue" || (state === "today" && a.owner === "dny"));
-    });
-  const overdueSteps = openSteps
-    .filter((a) => a.owner === "dny" && actionState(a, today) === "overdue")
-    .map((action) => ({ action, person: people.find((p) => p.id === action.personId)?.name ?? "Not on the team list" }));
   // Vision calls fixed for today: the consultants get the brief, the founders a list.
   const meetingIds = followUps.meetings.filter((m) => m.date === today).map((m) => m.leadId);
   const briefs = meetingIds.length ? await pipelineReads.briefings(meetingIds) : [];
@@ -168,19 +147,12 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
           };
         })()
       : undefined;
-    await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site, { items: forPerson(followUps, person.id), today }, focus, stepsFor(person.id)));
-  }
-
-  // A consultant with no calls that day still hears about the next steps due from their meetings.
-  for (const person of people.filter((p) => SCORED_ROLES.includes(p.role))) {
-    const steps = stepsFor(person.id);
-    if (steps.length === 0 || personDayReport(person, calls, sheets.questions).calls.length > 0) continue;
-    await deliver("person", `steps:${person.id}`, person.name, person.email, nextStepsEmail(person.name, steps, today, site));
+    await deliver("person", person.id, person.name, person.email, personReportEmail(report, day, site, { items: forPerson(followUps, person.id), today }, focus));
   }
 
   // Founders, managers and admins get the team summary (one copy to the test inbox while testing).
   if (calls.length > 0) {
-    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site, followUps, toReview, briefs, overdueSteps);
+    const email = teamSummaryEmail(teamSummary(people, calls, previous, sheets.questions), day, site, followUps, toReview, briefs);
     const readers = people.filter((p) => READER_ROLES.includes(p.role));
     const targets = testInbox ? [{ name: "test inbox", email: null }] : readers;
     if (targets.length === 0) result.skipped.push({ kind: "team", who: "founders", why: "no founder, manager or admin on the team list" });
@@ -283,73 +255,6 @@ export async function sendMissedCallAlerts({ preview = false } = {}): Promise<Mi
     // Marked either way, so a person added later doesn't get a backlog of old misses.
     const { error } = await db.from("calls").update({ missed_alerted_at: new Date().toISOString() }).in("id", items.flatMap((m) => m.callIds));
     if (error) throw new Error(`mark missed calls alerted: ${error.message}`);
-  }
-  return result;
-}
-
-export interface RecapSendResult {
-  sent: { to: string; client: string }[];
-  skipped: { client: string; why: string }[];
-  preview?: Email[];
-}
-
-/** Recaps go out for vision calls scored in this window; older ones aren't sent late. */
-const RECAP_WINDOW_MS = 2 * 24 * 3600_000;
-
-/**
- * The same day as the meeting: each scored vision call's recap to the consultant who ran it (to
- * the founders when the consultant isn't on the team list), once. Runs right after a vision call
- * is saved, and hourly as a safety net.
- */
-export async function sendMeetingRecaps({ preview = false } = {}): Promise<RecapSendResult> {
-  const db = supabaseAdmin();
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
-  const nowMs = Date.now();
-  const today = toIst(new Date(nowMs).toISOString()).slice(0, 10);
-  const result: RecapSendResult = { sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
-  const callIds = await pipelineReads.recapsToSend(new Date(nowMs - RECAP_WINDOW_MS).toISOString());
-  if (callIds.length === 0) return result;
-
-  const keys = callIds.map((id) => `recap:${id}`);
-  const [people, testInbox, sends] = await Promise.all([
-    pipelineReads.people(),
-    reportsTestInbox(),
-    db.from("report_sends").select("subject_key").eq("kind", "person").in("subject_key", keys),
-  ]);
-  if (sends.error) throw new Error(`report sends: ${sends.error.message}`);
-  const done = new Set(sends.data.map((s) => s.subject_key));
-
-  for (const callId of callIds) {
-    const key = `recap:${callId}`;
-    if (done.has(key) && !preview) continue;
-    const recap = await pipelineReads.recap(callId);
-    if (!recap) {
-      result.skipped.push({ client: callId, why: "scored before recaps existed" });
-      continue;
-    }
-    const email = meetingRecapEmail(recap, site, today);
-    if (preview) {
-      result.preview!.push(email);
-      continue;
-    }
-    const consultant = people.find((p) => p.id === recap.personId);
-    const intended = consultant?.email ? [consultant.email] : people.filter((p) => READER_ROLES.includes(p.role) && p.email).map((p) => p.email!);
-    const recipients = testInbox ? [testInbox] : intended;
-    if (recipients.length === 0) result.skipped.push({ client: recap.client.name, why: "no consultant or founder email on the team list" });
-    for (const to of recipients) {
-      // Claimed before sending, so two runs at once can't both send it.
-      const row = { report_date: recap.meetingAt.slice(0, 10), kind: "person", subject_key: key, recipient: to };
-      const { error } = await db.from("report_sends").insert(row);
-      if (error?.code === "23505") continue;
-      if (error) throw new Error(`record send: ${error.message}`);
-      try {
-        await sendEmail(to, email);
-      } catch (sendError) {
-        await db.from("report_sends").delete().match(row);
-        throw sendError;
-      }
-      result.sent.push({ to, client: recap.client.name });
-    }
   }
   return result;
 }

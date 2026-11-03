@@ -2,13 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { StepList } from "@/components/meeting-recap";
 import { Avatar, CalendarIcon, Card, Loading, QualityPill, ScoreFigure, StatTile, StatusLabel, WhatsAppButton } from "@/components/ui";
 import { firstCallRows } from "@/lib/capture";
-import { getLead, listLeadActions, listPeople, requireMe, type LeadStatus } from "@/lib/data";
+import { getLead, listPeople, requireMe, type LeadStatus } from "@/lib/data";
 import { dateFromText } from "@/lib/follow-ups";
 import { formatClock, formatDay, formatDuration, formatPhone, formatShortDay, IN_PROGRESS_LABEL, LEAD_STATUS_LABEL, NOT_SCORED_LABEL, toIst } from "@/lib/format";
-import { byDue } from "@/lib/recap";
 import { message } from "@/lib/whatsapp";
 import { LeadEditor } from "./lead-editor";
 
@@ -34,7 +32,7 @@ async function Lead({ params }: Pick<PageProps<"/leads/[id]">, "params">) {
   const { id } = await params;
   const me = await requireMe();
   // Row-level security returns nothing for a lead the viewer may not see, so it reads as not found.
-  const [lead, people, actions] = await Promise.all([getLead(id), listPeople(), listLeadActions(id)]);
+  const [lead, people] = await Promise.all([getLead(id), listPeople()]);
   if (!lead) notFound();
   const name = lead.capture?.clientName ?? lead.name ?? (lead.phone ? formatPhone(lead.phone) : "Unknown client");
   const nameOf = (personId: string | null) => people.find((p) => p.id === personId)?.name ?? "Not on the team list";
@@ -104,16 +102,6 @@ async function Lead({ params }: Pick<PageProps<"/leads/[id]">, "params">) {
           </p>
         )}
       </Card>
-
-      {actions.length > 0 && (
-        <Card className="mb-6">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Next steps</h2>
-            <span className="text-xs text-muted">{actions.filter((a) => !a.doneAt).length} open · from the vision call</span>
-          </div>
-          <StepList actions={[...actions].sort(byDue)} today={today} viewer={me} />
-        </Card>
-      )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile

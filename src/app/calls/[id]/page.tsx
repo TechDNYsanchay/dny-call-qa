@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
 import { RecordingPlayer, Transcript } from "@/components/call-recording";
-import { MeetingRecapCard, type Viewer } from "@/components/meeting-recap";
 import { DisputeForm } from "@/components/score-dispute";
 import { ScoreReview } from "@/components/score-review";
 import { Avatar, BandBadge, bandInk, Card, LevelPoints, LevelStatus, Loading, Quote, ScoreFigure, StatusLabel } from "@/components/ui";
 import { captureRows } from "@/lib/capture";
-import { getCall, getCallSheet, getMeetingRecap, getPerson, requireMe, type CallRecord } from "@/lib/data";
+import { getCall, getCallSheet, getPerson, requireMe, type CallRecord } from "@/lib/data";
 import {
   formatClock,
   formatDay,
@@ -18,7 +16,6 @@ import {
   IN_PROGRESS_LABEL,
   NOT_SCORED_LABEL,
   STREAM_LABEL,
-  toIst,
 } from "@/lib/format";
 import type { SheetQuestion } from "@/lib/scoring/call-sheets";
 import type { FirstCallResult } from "@/lib/scoring/schema";
@@ -100,7 +97,6 @@ async function CallDetail({ params, searchParams }: PageProps<"/calls/[id]">) {
       {call.dispute && <DisputeBanner call={call} mine={call.personId === me.id} />}
       {call.review && <ReviewBanner call={call} />}
       {call.secondOpinion && me.canSeeAll && <SecondOpinionBanner call={call} />}
-      {call.stream === "vision_call" && call.final && <CallRecap callId={call.id} viewer={me} />}
       {call.final && call.result ? <ScoredCall call={call} sheet={await getCallSheet(call.stream, call.sheetVersionId)} /> : null}
       {call.final && me.canSeeAll && (
         <div className="mt-6">
@@ -122,19 +118,6 @@ async function CallDetail({ params, searchParams }: PageProps<"/calls/[id]">) {
       )}
       {call.transcript.length > 0 && <Transcript lines={call.transcript} focusSec={startAt} />}
     </>
-  );
-}
-
-/** A vision call's recap and next steps, first: it is what the consultant acts on after the meeting. */
-async function CallRecap({ callId, viewer }: { callId: string; viewer: Viewer }) {
-  await connection();
-  const today = toIst(new Date().toISOString()).slice(0, 10);
-  const recap = await getMeetingRecap(callId);
-  if (!recap) return null;
-  return (
-    <div className="mb-6">
-      <MeetingRecapCard recap={recap} today={today} viewer={viewer} />
-    </div>
   );
 }
 
