@@ -23,6 +23,14 @@ export async function fetchTldvTranscript(meetingId: string): Promise<SpeakerTur
   return turns?.length ? turns : null;
 }
 
+/** One meeting with everything tl;dv knows (a TranscriptReady webhook carries less). */
+export async function fetchTldvMeeting(meetingId: string): Promise<TldvMeeting | null> {
+  const response = await get(`/meetings/${encodeURIComponent(meetingId)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`tl;dv meeting: HTTP ${response.status}`);
+  return parseTldvMeeting(await response.json());
+}
+
 /** One page of meetings the key can see, newest first as tl;dv lists them. */
 export async function listTldvMeetings(page: number): Promise<{ meetings: TldvMeeting[]; pages: number }> {
   const response = await get(`/meetings?page=${page}&limit=${PAGE_SIZE}`);

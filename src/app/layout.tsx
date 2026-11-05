@@ -76,6 +76,7 @@ async function SignedInNav() {
           items: [
             { href: "/", label: "Team", icon: "team", hint: "Everyone's scores for the day", also: ["/people"] },
             { href: "/follow-ups", label: "Follow-ups", icon: "followups", hint: "Missed calls and meetings to book" },
+            { href: "/meetings", label: "Meetings", icon: "meetings", hint: "Book sales meetings; tl;dv records them" },
             { href: "/calls", label: "Calls", icon: "calls", hint: "Every call, with its score" },
             { href: "/leads", label: "Leads", icon: "leads", hint: "Clients and where each one is" },
             { href: "/rollups", label: "Roll-ups", icon: "rollups", hint: "Weekly and monthly trends" },
@@ -96,6 +97,7 @@ async function SignedInNav() {
           items: [
             { href: `/people/${me.id}`, label: "My report", icon: "report", hint: "Your scores and what to work on" },
             { href: "/follow-ups", label: "My follow-ups", icon: "followups", hint: "Missed calls and meetings to book" },
+            { href: "/meetings", label: "Meetings", icon: "meetings", hint: "Book sales meetings; tl;dv records them" },
             { href: "/calls", label: "My calls", icon: "calls", hint: "Every call, with its score" },
             { href: "/leads", label: "My leads", icon: "leads", hint: "Your clients and where each one is" },
             { href: "/rollups", label: "My week", icon: "rollups", hint: "Your weekly and monthly trends" },

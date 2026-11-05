@@ -479,6 +479,38 @@ export type Database = {
           },
         ]
       }
+      google_connection: {
+        Row: {
+          connected_at: string
+          connected_by: string | null
+          email: string
+          id: boolean
+          refresh_token: string
+        }
+        Insert: {
+          connected_at?: string
+          connected_by?: string | null
+          email: string
+          id?: boolean
+          refresh_token: string
+        }
+        Update: {
+          connected_at?: string
+          connected_by?: string | null
+          email?: string
+          id?: boolean
+          refresh_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_connection_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           city: string | null
@@ -537,6 +569,95 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_bookings: {
+        Row: {
+          booked_by: string | null
+          calendar_event_id: string | null
+          call_id: string | null
+          cancelled_at: string | null
+          client_email: string
+          client_name: string
+          client_phone: string | null
+          consultant_id: string | null
+          created_at: string
+          duration_min: number
+          id: string
+          lead_id: string | null
+          meet_code: string | null
+          meet_url: string | null
+          notes: string | null
+          starts_at: string
+          status: string
+        }
+        Insert: {
+          booked_by?: string | null
+          calendar_event_id?: string | null
+          call_id?: string | null
+          cancelled_at?: string | null
+          client_email: string
+          client_name: string
+          client_phone?: string | null
+          consultant_id?: string | null
+          created_at?: string
+          duration_min: number
+          id?: string
+          lead_id?: string | null
+          meet_code?: string | null
+          meet_url?: string | null
+          notes?: string | null
+          starts_at: string
+          status?: string
+        }
+        Update: {
+          booked_by?: string | null
+          calendar_event_id?: string | null
+          call_id?: string | null
+          cancelled_at?: string | null
+          client_email?: string
+          client_name?: string
+          client_phone?: string | null
+          consultant_id?: string | null
+          created_at?: string
+          duration_min?: number
+          id?: string
+          lead_id?: string | null
+          meet_code?: string | null
+          meet_url?: string | null
+          notes?: string | null
+          starts_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_bookings_booked_by_fkey"
+            columns: ["booked_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_bookings_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_bookings_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_bookings_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]

@@ -1,4 +1,4 @@
-import { fetchTldvTranscript } from "@/lib/ingest/tldv-api";
+import { fetchTldvMeeting, fetchTldvTranscript } from "@/lib/ingest/tldv-api";
 import { storeTldvMeeting } from "@/lib/ingest/tldv";
 import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
 import { parseTldvWebhook } from "@/lib/tldv";
@@ -15,6 +15,15 @@ export async function POST(request: Request) {
   if (!hook) {
     console.warn("tldv webhook: payload not in the expected format");
     return Response.json({ error: "Not a tl;dv meeting event" }, { status: 422 });
+  }
+
+  // TranscriptReady carries no calendar details; fetch the meeting so it can be matched to a booking.
+  if (!hook.meeting.meetCode && hook.meeting.invitees.length === 0 && process.env.TLDV_API_KEY) {
+    const full = await fetchTldvMeeting(hook.meeting.sourceId).catch((error) => {
+      console.warn(`tldv webhook: meeting ${hook.meeting.sourceId} not fetched:`, error instanceof Error ? error.message : error);
+      return null;
+    });
+    if (full) hook.meeting = full;
   }
 
   let transcript = hook.transcript;

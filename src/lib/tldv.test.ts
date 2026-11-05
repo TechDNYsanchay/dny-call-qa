@@ -32,6 +32,7 @@ describe("tl;dv meetings", () => {
         { name: "Neha", email: "neha@dnyhospitality.com" },
       ],
       url: "https://tldv.io/app/meetings/6720f1a2b3c4d5e6f7a8b9c0",
+      meetCode: "abc-defg-hij",
     });
   });
 

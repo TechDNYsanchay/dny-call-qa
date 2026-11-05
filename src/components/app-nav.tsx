@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { InstallApp } from "@/components/install-app";
 import { Logo } from "@/components/logo";
 
-export type NavIconName = "team" | "report" | "followups" | "calls" | "leads" | "rollups" | "examples" | "scorecards" | "sheets" | "members";
+export type NavIconName = "team" | "report" | "followups" | "meetings" | "calls" | "leads" | "rollups" | "examples" | "scorecards" | "sheets" | "members";
 
 export interface NavItem {
   href: string;
@@ -584,6 +584,12 @@ const PATHS: Record<NavIconName | "search" | "menu" | "close" | "signout", React
     <>
       <path d="M2.75 4.25h10.5M2.75 8h10.5M2.75 11.75h5" />
       <path d="m10.25 11.5 1.5 1.5 2.5-2.75" />
+    </>
+  ),
+  meetings: (
+    <>
+      <rect x="2" y="3" width="12" height="11" rx="2" />
+      <path d="M2 6.5h12M5.5 1.75v2.5M10.5 1.75v2.5M6.5 10.25l1.25 1.25 2.5-2.75" />
     </>
   ),
   calls: (
