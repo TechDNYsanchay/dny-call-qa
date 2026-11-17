@@ -6,6 +6,7 @@ import "server-only";
 import { isSalesTitle } from "@/lib/booking";
 import { addDays } from "@/lib/format";
 import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
+import { startScoringRoutine } from "@/lib/routine";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { clientsOf, type TldvMeeting } from "@/lib/tldv";
 import type { SpeakerTurn } from "@/lib/transcription/turns";
@@ -13,6 +14,9 @@ import { fetchTldvTranscript, listTldvMeetings } from "./tldv-api";
 import { MEDIA_RETENTION_DAYS } from "./callyzer";
 
 export type StoreOutcome = "inserted" | "updated" | "unchanged" | "internal" | "not_sales";
+
+/** The transcript, or a way to fetch it that's only called once the meeting is known to need it. */
+export type TranscriptSource = SpeakerTurn[] | null | (() => Promise<SpeakerTurn[] | null>);
 
 type Db = ReturnType<typeof supabaseAdmin>;
 type Booking = { id: string; consultant_id: string | null; lead_id: string | null; client_name: string };
@@ -44,7 +48,7 @@ async function salesMeeting(db: Db, meeting: TldvMeeting, clientEmail: string): 
   return data.length ? { booking: null } : null;
 }
 
-export async function storeTldvMeeting(meeting: TldvMeeting, transcript: SpeakerTurn[] | null): Promise<StoreOutcome> {
+export async function storeTldvMeeting(meeting: TldvMeeting, source: TranscriptSource): Promise<StoreOutcome> {
   // A meeting with nobody from outside DNY is internal, not a vision call.
   const client = clientsOf(meeting)[0];
   if (!client?.email) return "internal";
@@ -123,10 +127,14 @@ export async function storeTldvMeeting(meeting: TldvMeeting, transcript: Speaker
     if (existing.transcript_status === "done") return outcome;
   }
 
-  if (eligible && transcript?.length) {
+  if (!eligible) return outcome;
+  const transcript = typeof source === "function" ? await source() : source;
+  if (transcript?.length) {
     const { error } = await db.rpc("save_transcript", { p_call_id: callId, p_provider: "tldv", p_segments: transcript as never });
     if (error) throw new Error(`save transcript: ${error.message}`);
     if (outcome === "unchanged") outcome = "updated";
+    // Ready for scoring: start the routine now rather than waiting for the nightly run.
+    await startScoringRoutine(`meeting "${meeting.title ?? meeting.sourceId}" is ready`);
   }
   return outcome;
 }
@@ -141,7 +149,11 @@ export interface TldvSyncResult {
   failed: number;
 }
 
-/** Catches meetings the webhook missed: everything that happened since `sinceIso`. */
+/**
+ * Catches meetings the webhook missed: everything that happened since `sinceIso`. Every 10 minutes in
+ * the day for the last few hours, and at night for the last 3 days. Transcripts are only fetched for
+ * sales meetings still waiting for one.
+ */
 export async function syncTldv(sinceIso: string, maxPages = 10): Promise<TldvSyncResult> {
   const result: TldvSyncResult = { checked: 0, inserted: 0, updated: 0, internal: 0, notSales: 0, failed: 0 };
   for (let page = 1; page <= maxPages; page++) {
@@ -150,8 +162,7 @@ export async function syncTldv(sinceIso: string, maxPages = 10): Promise<TldvSyn
     for (const meeting of recent) {
       result.checked++;
       try {
-        const transcript = meeting.durationSec >= MIN_SCORED_DURATION_SEC ? await fetchTldvTranscript(meeting.sourceId) : null;
-        const outcome = await storeTldvMeeting(meeting, transcript);
+        const outcome = await storeTldvMeeting(meeting, () => fetchTldvTranscript(meeting.sourceId));
         if (outcome === "inserted") result.inserted++;
         else if (outcome === "updated") result.updated++;
         else if (outcome === "internal") result.internal++;

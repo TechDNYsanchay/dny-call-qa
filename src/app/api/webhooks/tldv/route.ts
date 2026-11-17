@@ -1,12 +1,11 @@
 import { fetchTldvMeeting, fetchTldvTranscript } from "@/lib/ingest/tldv-api";
 import { storeTldvMeeting } from "@/lib/ingest/tldv";
-import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
 import { parseTldvWebhook } from "@/lib/tldv";
 import { readWebhook } from "@/lib/webhooks";
 
 // tl;dv posts MeetingReady and TranscriptReady here (set up once for the organisation, with
-// ?secret= on the URL). Each event stores the meeting as a vision call, with its transcript
-// when there is one; the nightly tldv-sync catches anything missed.
+// ?secret= on the URL). Each event stores a sales meeting as a vision call, with its transcript
+// when there is one, and starts the scoring; the 10-minute and nightly tldv syncs catch anything missed.
 export async function POST(request: Request) {
   const read = await readWebhook(request, process.env.TLDV_WEBHOOK_SECRET);
   if ("error" in read) return read.error;
@@ -26,19 +25,27 @@ export async function POST(request: Request) {
     if (full) hook.meeting = full;
   }
 
-  let transcript = hook.transcript;
-  if (!transcript && hook.meeting.durationSec >= MIN_SCORED_DURATION_SEC && process.env.TLDV_API_KEY) {
-    // Not embedded: fetch it. If tl;dv isn't ready yet, TranscriptReady or the nightly sync brings it.
-    transcript = await fetchTldvTranscript(hook.meeting.sourceId).catch((error) => {
-      console.warn(`tldv webhook: transcript for ${hook.meeting.sourceId} not fetched:`, error instanceof Error ? error.message : error);
-      return null;
-    });
-  }
+  // Not embedded: fetched only for a sales meeting that needs it. If tl;dv isn't ready yet,
+  // TranscriptReady or the 10-minute sync brings it.
+  let fetched = false;
+  const transcript =
+    hook.transcript ??
+    (process.env.TLDV_API_KEY
+      ? async () => {
+          const turns = await fetchTldvTranscript(hook.meeting.sourceId).catch((error) => {
+            console.warn(`tldv webhook: transcript for ${hook.meeting.sourceId} not fetched:`, error instanceof Error ? error.message : error);
+            return null;
+          });
+          fetched = Boolean(turns?.length);
+          return turns;
+        }
+      : null);
 
   try {
     const outcome = await storeTldvMeeting(hook.meeting, transcript);
-    console.info(`tldv webhook: ${hook.event} ${hook.meeting.sourceId}: ${outcome}${transcript ? " with transcript" : ""}`);
-    return Response.json({ event: hook.event, meeting: hook.meeting.sourceId, outcome, transcript: Boolean(transcript) });
+    const withTranscript = Boolean(hook.transcript?.length) || fetched;
+    console.info(`tldv webhook: ${hook.event} ${hook.meeting.sourceId}: ${outcome}${withTranscript ? " with transcript" : ""}`);
+    return Response.json({ event: hook.event, meeting: hook.meeting.sourceId, outcome, transcript: withTranscript });
   } catch (error) {
     console.error(`tldv webhook: ${hook.meeting.sourceId}:`, error);
     return Response.json({ error: "Couldn't store the meeting" }, { status: 500 });

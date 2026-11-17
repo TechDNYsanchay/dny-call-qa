@@ -47,12 +47,13 @@ async function loadCall(db: Db, callId: string) {
   return { call, segments: segments.map((s) => ({ ...s, start_sec: Number(s.start_sec), end_sec: Number(s.end_sec) })) };
 }
 
-/** The oldest call ready for scoring (first calls and vision calls alike), leaving out `exclude` (calls a run has given up on). */
+/** The next call ready for scoring, meetings before phone calls, oldest first, leaving out `exclude` (calls a run has given up on). */
 export async function nextReadyCallId(db: Db, exclude: string[] = [], stream?: Stream): Promise<string | null> {
   let query = db.from("calls").select("id").eq("scoring_status", "ready");
   if (stream) query = query.eq("stream", stream);
   if (exclude.length) query = query.not("id", "in", `(${exclude.join(",")})`);
-  const { data, error } = await query.order("started_at").limit(1);
+  // Meetings first (vision_call comes after first_call in the enum): a founder may be waiting on one.
+  const { data, error } = await query.order("stream", { ascending: false }).order("started_at").limit(1);
   if (error) throw new Error(`next call: ${error.message}`);
   return data[0]?.id ?? null;
 }

@@ -187,7 +187,7 @@ async function dataIssues(calls: { inProgress?: string; personId: string }[], ac
     const last = lastPhoneCallAt ? ` (the last one arrived ${shortDay(lastPhoneCallAt.slice(0, 10))}, ${clock12(lastPhoneCallAt)})` : "";
     issues.push(`Callyzer isn't sending new phone calls${last}, so the phone numbers here may be incomplete. Check the Callyzer subscription.`);
   }
-  if (failing.has("job:tldv-sync")) issues.push("Meetings couldn't be collected from tl;dv last night; some may be missing.");
+  if (failing.has("job:tldv-sync") || failing.has("job:tldv-recent")) issues.push("Meetings couldn't be collected from tl;dv; some may be missing.");
   // Calls on paused phones wait forever by design, so only the active team's count.
   const waiting = calls.filter((c) => activeIds.has(c.personId) && (c.inProgress === "scoring" || c.inProgress === "transcription" || c.inProgress === "transcription_failed")).length;
   if (waiting) issues.push(`${waiting} call${waiting === 1 ? " is" : "s are"} still being scored and will show in the app once done.`);

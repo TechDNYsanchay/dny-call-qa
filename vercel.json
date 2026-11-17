@@ -22,6 +22,10 @@
       "schedule": "20 19 * * *"
     },
     {
+      "path": "/api/cron/tldv-recent",
+      "schedule": "*/10 3-17 * * *"
+    },
+    {
       "path": "/api/cron/build-reports",
       "schedule": "30 0 * * *"
     },

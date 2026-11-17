@@ -21,6 +21,7 @@ const JOBS = {
   transcribe: "Every 15 minutes, 08:37-01:22 IST: transcribe stored recordings, oldest first",
   sweep: "00:30 IST: pull yesterday's and today's Callyzer calls to catch anything missed",
   "tldv-sync": "00:50 IST: store tl;dv meetings from the last 3 days that the webhook missed",
+  "tldv-recent": "Every 10 minutes, 08:30-23:30 IST: store meetings from the last 6 hours and start their scoring",
   "build-reports": "06:00 IST: flag unscored calls, write capture fields to leads, build reports",
   "send-reports": "08:00 IST: send each person's QA report and the founders' summary",
   "send-rollups": "08:15 IST: on Mondays the weekly roll-up for last week, on the 1st the monthly one for last month",
@@ -38,6 +39,7 @@ const WHAT_STOPS: Record<string, string> = {
   "send-reports": "The 8 am reports may not have gone out.",
   "send-rollups": "The weekly or monthly roll-up email may not have gone out.",
   "tldv-sync": "Vision calls from tl;dv aren't being collected.",
+  "tldv-recent": "Meetings aren't reaching the app straight after they end; the nightly run still collects them.",
   "missed-calls": "Executives aren't being told about missed client calls; the Follow-ups page still lists them.",
 };
 const MAX_RANGE_DAYS = 15;
@@ -99,10 +101,12 @@ export async function GET(request: Request, ctx: RouteContext<"/api/cron/[job]">
       const preview = new URL(request.url).searchParams.get("preview") === "1";
       return Response.json({ job, ...(await sendMissedCallAlerts({ preview })) });
     }
-    if (job === "tldv-sync") {
+    if (job === "tldv-sync" || job === "tldv-recent") {
       if (!process.env.TLDV_API_KEY) return Response.json({ job, done: false, note: "TLDV_API_KEY is not set" }, { status: 202 });
-      const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-      return Response.json({ job, since, ...(await syncTldv(since)) });
+      // The nightly run looks back 3 days; the daytime one only at the last few hours' first page.
+      const hours = job === "tldv-sync" ? 72 : 6;
+      const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+      return Response.json({ job, since, ...(await syncTldv(since, job === "tldv-sync" ? 10 : 1)) });
     }
     if (job === "sweep") {
       return Response.json({ job, ...(await syncCallyzer(addDays(today, -1), today)) });
