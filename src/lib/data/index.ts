@@ -445,6 +445,7 @@ export const pipelineReads = {
   callsBetween: (fromDay: string, toDay: string) => readCallsBetween(supabaseAdmin(), fromDay, toDay),
   previousDayAverages: (day: string) => readPreviousDayAverages(supabaseAdmin(), day),
   secondOpinionFlags: () => readSecondOpinionFlags(supabaseAdmin()),
+  openDisputes: () => readOpenDisputes(supabaseAdmin()),
   briefings: (leadIds: string[]) => readBriefings(leadIds),
 };
 
@@ -674,8 +675,7 @@ async function readSecondOpinionFlags(db: Client): Promise<CallRecord[]> {
 export const listSecondOpinionFlags = cache(async (): Promise<CallRecord[]> => readSecondOpinionFlags(await supabaseUser()));
 
 /** Scores executives have disputed that no founder has reviewed yet, oldest first. */
-export const listOpenDisputes = cache(async (): Promise<CallRecord[]> => {
-  const supabase = await supabaseUser();
+async function readOpenDisputes(supabase: Client): Promise<CallRecord[]> {
   const { data: open, error } = await supabase
     .from("call_scores")
     .select("call_id")
@@ -689,7 +689,9 @@ export const listOpenDisputes = cache(async (): Promise<CallRecord[]> => {
   if (callsError) fail("disputed calls", callsError);
   const calls = (rows as unknown as CallRow[]).map(toCallRecord);
   return calls.sort((a, b) => (a.dispute?.at ?? "").localeCompare(b.dispute?.at ?? ""));
-});
+}
+
+export const listOpenDisputes = cache(async (): Promise<CallRecord[]> => readOpenDisputes(await supabaseUser()));
 
 export interface LeadDetail {
   id: string;

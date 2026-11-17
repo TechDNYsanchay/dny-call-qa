@@ -15,7 +15,7 @@ import { MEDIA_RETENTION_DAYS } from "./callyzer";
 export type StoreOutcome = "inserted" | "updated" | "unchanged" | "internal" | "not_sales";
 
 type Db = ReturnType<typeof supabaseAdmin>;
-type Booking = { id: string; consultant_id: string | null; lead_id: string | null };
+type Booking = { id: string; consultant_id: string | null; lead_id: string | null; client_name: string };
 
 /** Days either side of the vision-call date fixed on a first call that a meeting still counts. */
 const VC_DATE_SLACK_DAYS = 3;
@@ -26,7 +26,7 @@ const VC_DATE_SLACK_DAYS = 3;
  */
 async function salesMeeting(db: Db, meeting: TldvMeeting, clientEmail: string): Promise<{ booking: Booking | null } | null> {
   if (meeting.meetCode) {
-    const { data, error } = await db.from("meeting_bookings").select("id, consultant_id, lead_id").eq("meet_code", meeting.meetCode).eq("status", "booked").maybeSingle();
+    const { data, error } = await db.from("meeting_bookings").select("id, consultant_id, lead_id, client_name").eq("meet_code", meeting.meetCode).eq("status", "booked").maybeSingle();
     if (error) throw new Error(`booking: ${error.message}`);
     if (data) return { booking: data };
   }
@@ -75,7 +75,7 @@ export async function storeTldvMeeting(meeting: TldvMeeting, transcript: Speaker
     leadId = leads[0]?.id ?? null;
   }
   if (!leadId) {
-    const { data, error } = await db.from("leads").insert({ email: client.email, name: client.name }).select("id").single();
+    const { data, error } = await db.from("leads").insert({ email: client.email, name: client.name ?? sales.booking?.client_name ?? null }).select("id").single();
     if (error) throw new Error(`lead: ${error.message}`);
     leadId = data.id;
   }

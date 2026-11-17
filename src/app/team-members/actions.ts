@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { getCurrentPerson } from "@/lib/data";
 import type { PersonRole } from "@/lib/data/types";
-import { setReportsTestInbox } from "@/lib/settings";
+import { setDailyEmailTo, setReportsTestInbox } from "@/lib/settings";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export interface FormState {
@@ -112,12 +112,20 @@ export async function setDelivery(_prev: FormState, form: FormData): Promise<For
   if (!me) return { error: "Only founders, managers and admins can change this." };
   const mode = form.get("mode");
   const inbox = String(form.get("inbox") ?? "").trim().toLowerCase();
+  if (mode === "daily") {
+    const to = [...new Set(String(form.get("dailyTo") ?? "").toLowerCase().split(/[\s,;]+/).filter(Boolean))];
+    if (to.length === 0 || !to.every((e) => Email.safeParse(e).success)) return { error: "Enter the email addresses, separated by commas." };
+    await setDailyEmailTo(to, me.id);
+    return { done: `One email a day at 8 am to ${to.join(", ")}. No other report emails go out.` };
+  }
   if (mode === "test") {
     if (!Email.safeParse(inbox).success) return { error: "Enter the test inbox's email." };
+    await setDailyEmailTo(null, me.id);
     await setReportsTestInbox(inbox, me.id);
     return { done: `Every report now goes to ${inbox}.` };
   }
   if (mode === "live") {
+    await setDailyEmailTo(null, me.id);
     await setReportsTestInbox(null, me.id);
     return { done: "Live: each person gets their own report, and founders, managers and admins get the summary." };
   }

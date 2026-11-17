@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Loading, PageHeader, StatTile } from "@/components/ui";
 import { listTeamMembers, requireMe } from "@/lib/data";
-import { reportsTestInbox } from "@/lib/settings";
+import { dailyEmailTo, reportsTestInbox } from "@/lib/settings";
 import { DeliveryCard, PeopleList } from "./team-editor";
 
 export const metadata = { title: "Team members · DNY Sales Agent" };
@@ -18,7 +18,7 @@ export default function TeamMembersPage() {
 async function TeamMembers() {
   const me = await requireMe();
   if (!me.canSeeAll) redirect("/");
-  const [people, testInbox] = await Promise.all([listTeamMembers(), reportsTestInbox()]);
+  const [people, testInbox, dailyTo] = await Promise.all([listTeamMembers(), reportsTestInbox(), dailyEmailTo()]);
   const active = people.filter((p) => p.active);
   const scored = active.filter((p) => p.role === "executive" || p.role === "consultant");
   return (
@@ -33,7 +33,7 @@ async function TeamMembers() {
         <StatTile label="Phones tracked" value={active.filter((p) => p.callyzerPhone).length} note="Callyzer numbers on the list" />
         <StatTile label="Can sign in" value={active.filter((p) => p.canSignIn).length} note={`of ${active.length} active`} />
       </div>
-      <DeliveryCard testInbox={testInbox} myEmail={me.email} />
+      <DeliveryCard testInbox={testInbox} dailyTo={dailyTo} myEmail={me.email} />
       <PeopleList people={people} meId={me.id} />
     </>
   );

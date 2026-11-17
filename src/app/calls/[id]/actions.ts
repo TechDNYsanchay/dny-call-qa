@@ -11,7 +11,7 @@ import { formatClock, formatDay, formatPhone, toIst } from "@/lib/format";
 import { finaliseScore, type Band, type Level } from "@/lib/scoring/compute";
 import type { CallMetrics } from "@/lib/scoring/metrics";
 import { areasFor, hardFailsFor } from "@/lib/scoring/scorecards";
-import { reportsTestInbox } from "@/lib/settings";
+import { dailyEmailTo, reportsTestInbox } from "@/lib/settings";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export interface ReviewState {
@@ -113,8 +113,10 @@ export async function disputeScore(_prev: DisputeState, form: FormData): Promise
     .eq("call_id", callId);
   if (saveError) return { error: `Couldn't save: ${saveError.message}` };
 
-  // Tell the reviewers. The dispute is saved either way and shows on the Team page.
+  // Tell the reviewers. The dispute is saved either way and shows on the Team page; with one daily
+  // email on, it's listed in the next 8 am email instead.
   try {
+    if (await dailyEmailTo()) return { done: "Sent. A founder will review the score; you'll see the outcome here." };
     const testInbox = await reportsTestInbox();
     const { data: reviewers } = await db.from("people").select("email").in("role", ["founder", "manager", "admin"]).eq("active", true).not("email", "is", null);
     const recipients = testInbox ? [testInbox] : [...new Set((reviewers ?? []).map((r) => r.email!))];

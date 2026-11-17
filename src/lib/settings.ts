@@ -23,3 +23,23 @@ export async function setReportsTestInbox(inbox: string | null, by: string): Pro
     .upsert({ key: REPORTS_TEST_INBOX, value: inbox, updated_at: new Date().toISOString(), updated_by: by });
   if (error) throw new Error(`settings: ${error.message}`);
 }
+
+const DAILY_EMAIL_TO = "daily_email_to";
+
+/**
+ * "One daily email": the addresses that get the single 8 am email with everything in it (usually
+ * the founders). While it's set, no other report email goes out. Null when it's off.
+ */
+export async function dailyEmailTo(): Promise<string[] | null> {
+  const { data, error } = await supabaseAdmin().from("app_settings").select("value").eq("key", DAILY_EMAIL_TO).maybeSingle();
+  if (error) throw new Error(`settings: ${error.message}`);
+  const list = Array.isArray(data?.value) ? data.value.filter((x): x is string => typeof x === "string" && x.includes("@")) : [];
+  return list.length ? list : null;
+}
+
+export async function setDailyEmailTo(to: string[] | null, by: string | null): Promise<void> {
+  const { error } = await supabaseAdmin()
+    .from("app_settings")
+    .upsert({ key: DAILY_EMAIL_TO, value: to?.length ? to : null, updated_at: new Date().toISOString(), updated_by: by });
+  if (error) throw new Error(`settings: ${error.message}`);
+}

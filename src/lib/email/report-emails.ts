@@ -20,33 +20,33 @@ export interface Email {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** "2026-10-23" -> "Fri 23 Oct" */
-function shortDay(day: string): string {
+export function shortDay(day: string): string {
   const weekday = WEEKDAYS[new Date(`${day}T00:00:00Z`).getUTCDay()];
   return `${weekday} ${formatDay(day).replace(/ \d{4}$/, "")}`;
 }
 
 // Shape and word, never colour alone (brief: status colours ship with an icon and a label).
-const BAND: Record<Band, { mark: string; word: string; colour: string }> = {
+export const BAND: Record<Band, { mark: string; word: string; colour: string }> = {
   green: { mark: "●", word: "Green", colour: "#0ca30c" },
   amber: { mark: "▲", word: "Amber", colour: "#b97f00" },
   red: { mark: "■", word: "Red", colour: "#d03b3b" },
 };
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-function bandHtml(score: number | null, band: Band | null): string {
+export function bandHtml(score: number | null, band: Band | null): string {
   if (score === null || !band) return `<span style="color:#6b6b65">not scored</span>`;
   const b = BAND[band];
   return `<b>${score}</b> <span style="color:${b.colour}">${b.mark}</span> ${b.word}`;
 }
-const bandText = (score: number | null, band: Band | null) => (score === null || !band ? "not scored" : `${score} ${BAND[band].word}`);
+export const bandText = (score: number | null, band: Band | null) => (score === null || !band ? "not scored" : `${score} ${BAND[band].word}`);
 
-const P = "margin:0 0 12px";
-const H2 = "font-size:15px;margin:24px 0 8px";
-const MUTED = "color:#6b6b65";
-const QUOTE = "margin:4px 0 0;padding-left:10px;border-left:3px solid #e5e4df;color:#3d3d39;font-style:italic";
+export const P = "margin:0 0 12px";
+export const H2 = "font-size:15px;margin:24px 0 8px";
+export const MUTED = "color:#6b6b65";
+export const QUOTE = "margin:4px 0 0;padding-left:10px;border-left:3px solid #e5e4df;color:#3d3d39;font-style:italic";
 
-function layout(title: string, body: string, footerLink: { href: string; label: string }): string {
+export function layout(title: string, body: string, footerLink: { href: string; label: string }): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head><body style="margin:0;padding:24px 16px;background:#fcfcfb;color:#1c1c1a;font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
 <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #e5e4df;border-radius:12px;padding:24px">
 <img src="cid:${EMAIL_LOGO.cid}" width="${EMAIL_LOGO.width}" height="${EMAIL_LOGO.height}" alt="DNY Sales Agent" style="display:block;border:0;margin:0 0 18px">

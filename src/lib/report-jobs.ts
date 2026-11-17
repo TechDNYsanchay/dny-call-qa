@@ -1,19 +1,22 @@
 // The two morning jobs (brief section 6). 06:00 IST: flag calls that can't be scored and store
-// each person's day. 08:00 IST: email each person their report and the founders the summary.
+// each person's day. 08:00 IST: email each person their report and the founders the summary, or,
+// with "One daily email" on (Team members page), one email with everything to the founders only.
 // Pipeline code: reads with the secret key because no viewer is involved.
 
 import "server-only";
 import { pipelineReads } from "@/lib/data";
-import { briefingEmail, missedCallsEmail, personReportEmail, personRollupEmail, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { briefingEmail, missedCallsEmail, personReportEmail, personRollupEmail, shortDay, teamRollupEmail, teamSummaryEmail, type Email } from "@/lib/email/report-emails";
+import { clock12, dailyEmail, type TodayMeeting } from "@/lib/email/daily-email";
 import { focusHit, focusLabel, focusProgress } from "@/lib/coaching";
 import { forPerson, isOverdue, type MissedItem } from "@/lib/follow-ups";
 import { alert } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email/send";
-import { istDayRange, toIst } from "@/lib/format";
+import { addDays, istDayRange, toIst } from "@/lib/format";
 import { personDayReport, teamSummary } from "@/lib/reports";
-import { rollup, type Period } from "@/lib/rollups";
+import { monthPeriod, rollup, weekPeriod, type Period, type Rollup } from "@/lib/rollups";
 import { MIN_SCORED_DURATION_SEC } from "@/lib/scoring/compute";
-import { reportsTestInbox } from "@/lib/settings";
+import { dailyEmailTo, reportsTestInbox } from "@/lib/settings";
+import { timeIn } from "@/lib/whatsapp";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 const SCORED_ROLES = ["executive", "consultant"];
@@ -80,6 +83,9 @@ export interface SendResult {
 
 /** Sends the day's emails once each; a re-run skips what was already sent. `limit` caps sends, for trying it. */
 export async function sendDailyReports(day: string, { preview = false, limit = Infinity } = {}): Promise<SendResult> {
+  // "One daily email" replaces every other report email.
+  const daily = await dailyEmailTo();
+  if (daily) return sendDailyEmail(day, daily, { preview });
   const db = supabaseAdmin();
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
   // Follow-ups are as of now (the morning the email goes out), not the report day.
@@ -100,19 +106,7 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   const focusCalls = focuses.length ? await pipelineReads.callsBetween(earliestFocus, day) : [];
   const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [] } : {}) };
   const testInbox = await reportsTestInbox();
-
-  // The nightly scoring should have finished by now; say so if calls are still waiting.
-  if (!preview) {
-    const waiting = calls.filter((c) => c.inProgress === "scoring").length;
-    const failed = calls.filter((c) => c.inProgress === "transcription_failed").length;
-    if (waiting || failed) {
-      await alert(`scoring:${day}`, `${waiting + failed} call(s) from ${day} weren't scored`, [
-        waiting ? `${waiting} transcribed call(s) from ${day} are still waiting for the nightly scoring. Check the routine at https://claude.ai/code/routines.` : "",
-        failed ? `${failed} call(s) from ${day} couldn't be transcribed.` : "",
-        "Today's reports went out without them; they'll be scored on the next run.",
-      ].filter(Boolean));
-    }
-  }
+  if (!preview) await alertUnscored(day, calls);
 
   const { data: alreadySent, error: sentError } = await db.from("report_sends").select("kind, subject_key, recipient").eq("report_date", day);
   if (sentError) throw new Error(`report sends: ${sentError.message}`);
@@ -170,11 +164,116 @@ export async function sendDailyReports(day: string, { preview = false, limit = I
   return result;
 }
 
+/** The nightly scoring should have finished by 8 am; tell tech@ if calls are still waiting. */
+async function alertUnscored(day: string, calls: { inProgress?: string }[]): Promise<void> {
+  const waiting = calls.filter((c) => c.inProgress === "scoring").length;
+  const failed = calls.filter((c) => c.inProgress === "transcription_failed").length;
+  if (!waiting && !failed) return;
+  await alert(`scoring:${day}`, `${waiting + failed} call(s) from ${day} weren't scored`, [
+    waiting ? `${waiting} transcribed call(s) from ${day} are still waiting for the nightly scoring. Check the routine at https://claude.ai/code/routines.` : "",
+    failed ? `${failed} call(s) from ${day} couldn't be transcribed.` : "",
+    "Today's reports went out without them; they'll be scored on the next run.",
+  ].filter(Boolean));
+}
+
+/** Plain sentences on anything missing from the email: a job that keeps failing, calls still waiting. */
+async function dataIssues(calls: { inProgress?: string; personId: string }[], activeIds: Set<string>, lastPhoneCallAt: string | null): Promise<string[]> {
+  const since = new Date(Date.now() - 26 * 3600_000).toISOString();
+  const { data, error } = await supabaseAdmin().from("alert_log").select("key").like("key", "job:%").gte("last_sent_at", since);
+  if (error) throw new Error(`alert log: ${error.message}`);
+  const failing = new Set(data.map((r) => r.key));
+  const issues: string[] = [];
+  if (failing.has("job:callyzer-sync") || failing.has("job:sweep")) {
+    const last = lastPhoneCallAt ? ` (the last one arrived ${shortDay(lastPhoneCallAt.slice(0, 10))}, ${clock12(lastPhoneCallAt)})` : "";
+    issues.push(`Callyzer isn't sending new phone calls${last}, so the phone numbers here may be incomplete. Check the Callyzer subscription.`);
+  }
+  if (failing.has("job:tldv-sync")) issues.push("Meetings couldn't be collected from tl;dv last night; some may be missing.");
+  // Calls on paused phones wait forever by design, so only the active team's count.
+  const waiting = calls.filter((c) => activeIds.has(c.personId) && (c.inProgress === "scoring" || c.inProgress === "transcription" || c.inProgress === "transcription_failed")).length;
+  if (waiting) issues.push(`${waiting} call${waiting === 1 ? " is" : "s are"} still being scored and will show in the app once done.`);
+  return issues;
+}
+
+/**
+ * The one daily email: everything from `day` in a single email to `recipients` (all on one To line),
+ * once. On Mondays it carries last week's roll-up and on the 1st last month's.
+ */
+export async function sendDailyEmail(day: string, recipients: string[], { preview = false } = {}): Promise<SendResult> {
+  const db = supabaseAdmin();
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
+  const today = toIst(new Date().toISOString()).slice(0, 10);
+  const [todayFrom, todayTo] = istDayRange(today);
+  const [people, calls, previousCalls, sheets, followUps, toReview, disputes, bookings, lastPhone] = await Promise.all([
+    pipelineReads.people(),
+    pipelineReads.calls(day),
+    pipelineReads.calls(addDays(day, -1)),
+    pipelineReads.activeSheets(),
+    pipelineReads.followUps(today),
+    pipelineReads.secondOpinionFlags(),
+    pipelineReads.openDisputes(),
+    db.from("meeting_bookings").select("starts_at, client_name, lead_id, consultant_id").eq("status", "booked").gte("starts_at", todayFrom).lt("starts_at", todayTo).order("starts_at"),
+    db.from("calls").select("started_at").eq("source", "callyzer").order("started_at", { ascending: false }).limit(1),
+  ]);
+  if (bookings.error) throw new Error(`bookings: ${bookings.error.message}`);
+  if (lastPhone.error) throw new Error(`last phone call: ${lastPhone.error.message}`);
+  if (!preview) await alertUnscored(day, calls);
+
+  const nameOf = (id: string | null) => (id ? (people.find((p) => p.id === id)?.name ?? null) : null);
+  const brief = (leadId: string | null) => (leadId ? `${site}/leads/${leadId}/brief` : null);
+  // Booked in the app (in time order), then meetings fixed on a first call for today that weren't booked.
+  const meetingsToday: TodayMeeting[] = [
+    ...bookings.data.map((b) => ({ time: clock12(toIst(b.starts_at)), client: b.client_name, host: nameOf(b.consultant_id), link: brief(b.lead_id) })),
+    ...followUps.meetings
+      .filter((m) => m.date === today && !bookings.data.some((b) => b.lead_id === m.leadId))
+      .map((m) => ({ time: timeIn(m.when), client: m.name, host: nameOf(m.personId), link: brief(m.leadId) })),
+  ];
+
+  const rollups: Rollup[] = [];
+  const periods: Period[] = [];
+  if (new Date(`${today}T00:00:00Z`).getUTCDay() === 1) periods.push(weekPeriod(addDays(today, -7)));
+  if (today.endsWith("-01")) periods.push(monthPeriod(addDays(today, -1).slice(0, 7)));
+  for (const period of periods) {
+    const [now, before] = await Promise.all([pipelineReads.callsBetween(period.from, period.to), pipelineReads.callsBetween(period.previous.from, period.previous.to)]);
+    rollups.push(rollup(period, people, now, before, sheets.questions));
+  }
+
+  const lastPhoneCallAt = lastPhone.data[0] ? toIst(lastPhone.data[0].started_at) : null;
+  const email = dailyEmail({
+    day,
+    today,
+    siteUrl: site,
+    people,
+    calls,
+    previousCalls,
+    questions: sheets.questions,
+    followUps,
+    toReview,
+    disputes,
+    meetingsToday,
+    rollups,
+    lastPhoneCallAt,
+    dataIssues: await dataIssues(calls, new Set(people.map((p) => p.id)), lastPhoneCallAt),
+  });
+
+  const result: SendResult = { day, sent: [], skipped: [], ...(preview ? { preview: [email] } : {}) };
+  if (preview) return result;
+  const to = recipients.join(", ");
+  const { data: sent, error } = await db.from("report_sends").select("recipient").eq("report_date", day).eq("kind", "team").eq("subject_key", "daily").eq("recipient", to);
+  if (error) throw new Error(`report sends: ${error.message}`);
+  if (sent.length) return { ...result, skipped: [{ kind: "team", who: to, why: "already sent" }] };
+  await sendEmail(to, email);
+  const { error: logError } = await db.from("report_sends").insert({ report_date: day, kind: "team", subject_key: "daily", recipient: to });
+  if (logError) throw new Error(`record send: ${logError.message}`);
+  result.sent.push({ kind: "team", subject: email.subject, to });
+  return result;
+}
+
 /**
  * Emails the weekly or monthly roll-up: the team version to founders, managers and admins, and
  * each person's own. Same once-only rule and test inbox as the daily emails.
  */
 export async function sendRollups(period: Period, { preview = false, limit = Infinity } = {}): Promise<SendResult> {
+  if (await dailyEmailTo()) return { day: period.from, sent: [], skipped: [{ kind: "team", who: "everyone", why: "one daily email is on: the roll-up is inside the 8 am email" }] };
   const db = supabaseAdmin();
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
   const [people, calls, previousCalls] = await Promise.all([
@@ -228,6 +327,8 @@ export interface MissedAlertResult {
  * answered and still haven't been called back after 2 hours. Each missed call is in one alert only.
  */
 export async function sendMissedCallAlerts({ preview = false } = {}): Promise<MissedAlertResult> {
+  // With one daily email, missed calls are listed in the 8 am email instead.
+  if (await dailyEmailTo()) return { sent: [], skipped: [{ person: "everyone", why: "one daily email is on: missed calls are in the 8 am email" }] };
   const db = supabaseAdmin();
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dny-call-qa.vercel.app";
   const nowMs = Date.now();

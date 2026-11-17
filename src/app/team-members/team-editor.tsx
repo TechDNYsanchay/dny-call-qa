@@ -40,9 +40,9 @@ function Message({ state }: { state: FormState }) {
   return null;
 }
 
-export function DeliveryCard({ testInbox, myEmail }: { testInbox: string | null; myEmail: string | null }) {
+export function DeliveryCard({ testInbox, dailyTo, myEmail }: { testInbox: string | null; dailyTo: string[] | null; myEmail: string | null }) {
   const [state, action, pending] = useRefreshingAction(setDelivery);
-  const [mode, setMode] = useState<"test" | "live">(testInbox ? "test" : "live");
+  const [mode, setMode] = useState<"daily" | "test" | "live">(dailyTo ? "daily" : testInbox ? "test" : "live");
   const option = (active: boolean) =>
     `flex cursor-pointer gap-3 rounded-lg border p-3.5 transition-colors ${active ? "border-foreground/40 bg-background" : "border-border hover:bg-background/60"}`;
   return (
@@ -50,11 +50,27 @@ export function DeliveryCard({ testInbox, myEmail }: { testInbox: string | null;
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Where reports go</h2>
         <span className="text-xs">
-          {testInbox ? <StatusLabel band="amber">Testing: all to {testInbox}</StatusLabel> : <StatusLabel band="green">Live: each person gets theirs</StatusLabel>}
+          {dailyTo ? (
+            <StatusLabel band="green">One daily email to {dailyTo.join(", ")}</StatusLabel>
+          ) : testInbox ? (
+            <StatusLabel band="amber">Testing: all to {testInbox}</StatusLabel>
+          ) : (
+            <StatusLabel band="green">Live: each person gets theirs</StatusLabel>
+          )}
         </span>
       </div>
       <form action={action} className="space-y-3 text-sm">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-3">
+          <label className={option(mode === "daily")}>
+            <input type="radio" name="mode" value="daily" checked={mode === "daily"} onChange={() => setMode("daily")} className="mt-1" />
+            <span className="min-w-0">
+              <span className="block font-medium">One daily email</span>
+              <span className="block text-xs text-muted">Everything from yesterday in one 8 am email: phone calls, meetings, what needs you and today&apos;s meetings. No other report emails go out.</span>
+              {mode === "daily" && (
+                <input name="dailyTo" defaultValue={(dailyTo ?? []).join(", ")} required placeholder="yash@dnyhospitality.com, nikita@dnyhospitality.com" className={`${INPUT} mt-2`} aria-label="Send the daily email to" />
+              )}
+            </span>
+          </label>
           <label className={option(mode === "test")}>
             <input type="radio" name="mode" value="test" checked={mode === "test"} onChange={() => setMode("test")} className="mt-1" />
             <span className="min-w-0">
@@ -70,7 +86,7 @@ export function DeliveryCard({ testInbox, myEmail }: { testInbox: string | null;
             <span className="min-w-0">
               <span className="block font-medium">Live</span>
               <span className="block text-xs text-muted">Each person gets their own 8 am report; founders, managers and admins get the team summary.</span>
-              {mode === "live" && testInbox && <span className="mt-2 block text-xs text-warning-ink">People without an email below are skipped. Check everyone&apos;s email first.</span>}
+              {mode === "live" && (testInbox || dailyTo) && <span className="mt-2 block text-xs text-warning-ink">People without an email below are skipped. Check everyone&apos;s email first.</span>}
             </span>
           </label>
         </div>
