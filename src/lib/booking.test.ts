@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseTldvMeeting } from "@/lib/tldv";
-import { calendarEvent, existingMeetingEvent, isSalesTitle, meetCode, meetingLinkMessage, meetingTitle, parseBookingForm, parseExistingMeetingForm, whenText } from "./booking";
+import { calendarEvent, calendarIdOf, existingEventId, existingMeetingEvent, isExistingMeeting, isSalesTitle, meetCode, meetingLinkMessage, meetingTitle, parseBookingForm, parseExistingMeetingForm, whenText } from "./booking";
 
 // Wednesday 4 Nov 2026, 10:00 IST.
 const NOW = Date.parse("2026-11-04T10:00:00+05:30");
@@ -144,5 +144,16 @@ describe("adding an existing meeting", () => {
     expect(event.conferenceData).toMatchObject({ conferenceId: "arj-csyw-exe", conferenceSolution: { key: { type: "hangoutsMeet" } } });
     expect(existingMeetingEvent(r.value, false)).not.toHaveProperty("conferenceData");
     expect(existingMeetingEvent(r.value, false).location).toBe("https://meet.google.com/arj-csyw-exe");
+  });
+});
+
+describe("telling an added meeting from a booked one", () => {
+  it("marks the calendar copy's id and reads it back", () => {
+    const id = existingEventId("abc123");
+    expect(isExistingMeeting(id)).toBe(true);
+    expect(calendarIdOf(id)).toBe("abc123");
+    expect(isExistingMeeting("abc123")).toBe(false);
+    expect(isExistingMeeting(null)).toBe(false);
+    expect(calendarIdOf("abc123")).toBe("abc123");
   });
 });

@@ -585,7 +585,6 @@ export type Database = {
           consultant_id: string | null
           created_at: string
           duration_min: number
-          existing: boolean
           id: string
           lead_id: string | null
           meet_code: string | null
@@ -605,7 +604,6 @@ export type Database = {
           consultant_id?: string | null
           created_at?: string
           duration_min: number
-          existing?: boolean
           id?: string
           lead_id?: string | null
           meet_code?: string | null
@@ -625,7 +623,6 @@ export type Database = {
           consultant_id?: string | null
           created_at?: string
           duration_min?: number
-          existing?: boolean
           id?: string
           lead_id?: string | null
           meet_code?: string | null

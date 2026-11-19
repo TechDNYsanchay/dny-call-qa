@@ -4,7 +4,7 @@
 // on the recording account's calendar, so tl;dv records it and the result reaches Sales QA.
 
 import { refresh } from "next/cache";
-import { calendarEvent, existingMeetingEvent, meetingLinkMessage, parseBookingForm, parseExistingMeetingForm, whenText, type ExistingFieldErrors, type FieldErrors, type Guest } from "@/lib/booking";
+import { calendarEvent, calendarIdOf, existingEventId, existingMeetingEvent, isExistingMeeting, meetingLinkMessage, parseBookingForm, parseExistingMeetingForm, whenText, type ExistingFieldErrors, type FieldErrors, type Guest } from "@/lib/booking";
 import { getCurrentPerson } from "@/lib/data";
 import { addExistingMeeting as addToCalendar, cancelMeeting, createMeeting, GoogleNotReady } from "@/lib/google";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -125,7 +125,6 @@ export async function addExistingMeeting(_prev: ExistingState, form: FormData): 
     meet_code: m.meetCode,
     status: "booked" as const,
     cancelled_at: null,
-    existing: true,
   };
   const saved = same
     ? await db.from("meeting_bookings").update(fields).eq("id", same.id).select("id").single()
@@ -134,7 +133,7 @@ export async function addExistingMeeting(_prev: ExistingState, form: FormData): 
 
   try {
     const copy = await addToCalendar(existingMeetingEvent(m), existingMeetingEvent(m, false));
-    const { error } = await db.from("meeting_bookings").update({ calendar_event_id: copy.eventId }).eq("id", saved.data.id);
+    const { error } = await db.from("meeting_bookings").update({ calendar_event_id: existingEventId(copy.eventId) }).eq("id", saved.data.id);
     if (error) return { errors: { form: `The meeting is on the recording calendar, but the app couldn't save that: ${error.message}` } };
     return { done: { clientName: m.clientName, when: whenText(m.startsAt), meetUrl: m.meetUrl, videoAttached: copy.videoAttached, withClient: Boolean(m.clientEmail) } };
   } catch (error) {
@@ -149,13 +148,13 @@ export async function cancelBooking(id: string): Promise<{ error?: string }> {
   const me = await getCurrentPerson();
   if (!me) return { error: "Sign in again to do this." };
   const db = supabaseAdmin();
-  const { data: booking, error } = await db.from("meeting_bookings").select("id, booked_by, consultant_id, calendar_event_id, status, existing").eq("id", id).maybeSingle();
+  const { data: booking, error } = await db.from("meeting_bookings").select("id, booked_by, consultant_id, calendar_event_id, status").eq("id", id).maybeSingle();
   if (error) return { error: `Couldn't load the meeting: ${error.message}` };
   if (!booking || booking.status === "cancelled") return { error: "This meeting is already cancelled; refresh the page." };
   if (!me.canSeeAll && booking.booked_by !== me.id && booking.consultant_id !== me.id) return { error: "Only whoever booked or takes the meeting can cancel it." };
   try {
     // A meeting set up elsewhere loses only the recording calendar's copy, quietly: the real meeting stands.
-    if (booking.calendar_event_id) await cancelMeeting(booking.calendar_event_id, !booking.existing);
+    if (booking.calendar_event_id) await cancelMeeting(calendarIdOf(booking.calendar_event_id), !isExistingMeeting(booking.calendar_event_id));
   } catch (cancelError) {
     return { error: cancelError instanceof Error ? cancelError.message : String(cancelError) };
   }

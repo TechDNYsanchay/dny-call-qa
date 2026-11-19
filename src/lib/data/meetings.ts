@@ -3,6 +3,7 @@
 // booking, everyone else the ones they booked or take.
 
 import "server-only";
+import { isExistingMeeting } from "@/lib/booking";
 import { toIst } from "@/lib/format";
 import type { Band } from "@/lib/scoring/compute";
 import { supabaseAdmin, supabaseUser } from "@/lib/supabase/server";
@@ -38,7 +39,7 @@ type Row = {
   meet_url: string | null;
   status: "booked" | "cancelled";
   lead_id: string | null;
-  existing: boolean;
+  calendar_event_id: string | null;
   call_id: string | null;
   consultant: { full_name: string } | null;
   booker: { full_name: string } | null;
@@ -50,7 +51,7 @@ export async function listBookings(me: Me, days = 30): Promise<BookingRow[]> {
   let query = supabaseAdmin()
     .from("meeting_bookings")
     .select(
-      `id, client_name, client_email, client_phone, starts_at, duration_min, consultant_id, booked_by, meet_url, status, lead_id, existing, call_id,
+      `id, client_name, client_email, client_phone, starts_at, duration_min, consultant_id, booked_by, meet_url, status, lead_id, calendar_event_id, call_id,
        consultant:people!meeting_bookings_consultant_id_fkey ( full_name ),
        booker:people!meeting_bookings_booked_by_fkey ( full_name ),
        calls ( scoring_status, call_scores ( score, band ) )`,
@@ -73,7 +74,7 @@ export async function listBookings(me: Me, days = 30): Promise<BookingRow[]> {
     meetUrl: r.meet_url,
     status: r.status,
     leadId: r.lead_id,
-    existing: r.existing,
+    existing: isExistingMeeting(r.calendar_event_id),
     call: r.call_id && r.calls
       ? { id: r.call_id, score: r.calls.call_scores ? Number(r.calls.call_scores.score) : null, band: r.calls.call_scores?.band ?? null, scoringStatus: r.calls.scoring_status }
       : null,

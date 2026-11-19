@@ -165,6 +165,16 @@ export function meetingLinkMessage(clientName: string, startsAt: string, meetUrl
 // Meetings set up outside the app (on someone's own calendar), added by their Meet link
 // ---------------------------------------------------------------------------
 
+/**
+ * Such a meeting's booking keeps its calendar copy's id with this prefix, which tells the app it
+ * didn't create the meeting: cancelling removes only the copy, quietly, and no link is sent.
+ */
+const EXISTING_PREFIX = "existing:";
+export const existingEventId = (eventId: string) => `${EXISTING_PREFIX}${eventId}`;
+export const isExistingMeeting = (calendarEventId: string | null | undefined) => Boolean(calendarEventId?.startsWith(EXISTING_PREFIX));
+/** The Google Calendar event id, without the prefix. */
+export const calendarIdOf = (calendarEventId: string) => calendarEventId.replace(EXISTING_PREFIX, "");
+
 const ExistingFormSchema = z.object({
   meetLink: z.string().trim().refine((v) => meetCode(v) !== null, "Paste the Google Meet link, like meet.google.com/abc-defg-hij"),
   clientName: text(80).min(2, "Add the client's name"),
