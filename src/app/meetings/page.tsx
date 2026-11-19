@@ -45,12 +45,17 @@ async function Meetings({ searchParams }: Pick<PageProps<"/meetings">, "searchPa
     <>
       <PageHeader
         title={me.canSeeAll ? "Meetings" : "My meetings"}
-        subtitle="Book sales meetings here: everyone gets a Google Meet invite, tl;dv records the call, and it's scored the same night."
+        subtitle="Book sales meetings here: everyone gets a Google Meet invite, tl;dv records the call, and it's scored minutes after it ends. A meeting set up on someone's own calendar can be added by its Meet link."
       >
         {ready ? (
-          <Link href="/meetings/new" className={PRIMARY}>
-            <span aria-hidden="true">+</span> Book a sales meeting
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/meetings/existing" className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-background">
+              Add an existing meeting
+            </Link>
+            <Link href="/meetings/new" className={PRIMARY}>
+              <span aria-hidden="true">+</span> Book a sales meeting
+            </Link>
+          </div>
         ) : null}
       </PageHeader>
 
@@ -110,7 +115,7 @@ function result(r: BookingRow, nowMs: number, endMs: number) {
   if (r.call)
     return (
       <Link href={`/calls/${r.call.id}`} className="text-muted hover:text-foreground hover:underline">
-        Recorded · scored tonight
+        Recorded · being scored
       </Link>
     );
   if (nowMs - endMs > RECORDING_GRACE_MS) return <StatusLabel band="amber">Not recorded</StatusLabel>;
@@ -131,7 +136,12 @@ function DateTile({ iso }: { iso: string }) {
 }
 
 function MeetingRow({ row: r, showBooker, canCancel = false, live = false, result }: { row: BookingRow; showBooker: boolean; canCancel?: boolean; live?: boolean; result?: ReactNode }) {
-  const detail = [`${formatClock(r.startsAt)} · ${r.durationMin} min`, r.consultant ? `with ${r.consultant.name}` : "host not on the team list", showBooker && r.bookedBy ? `booked by ${r.bookedBy.name}` : null]
+  const detail = [
+    `${formatClock(r.startsAt)} · ${r.durationMin} min`,
+    r.consultant ? `with ${r.consultant.name}` : "host not on the team list",
+    r.existing ? "set up on their own calendar" : null,
+    showBooker && r.bookedBy ? `${r.existing ? "added" : "booked"} by ${r.bookedBy.name}` : null,
+  ]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -160,9 +170,9 @@ function MeetingRow({ row: r, showBooker, canCancel = false, live = false, resul
                 Join
               </a>
             )}
-            {r.meetUrl && <WhatsAppButton phone={r.clientPhone} text={meetingLinkMessage(r.clientName, r.startsAt, r.meetUrl)} label="Send link" />}
+            {r.meetUrl && !r.existing && <WhatsAppButton phone={r.clientPhone} text={meetingLinkMessage(r.clientName, r.startsAt, r.meetUrl)} label="Send link" />}
             {r.meetUrl && <CopyLinkButton text={r.meetUrl} />}
-            {canCancel && <CancelMeetingButton id={r.id} client={r.clientName} />}
+            {canCancel && <CancelMeetingButton id={r.id} client={r.clientName} existing={r.existing} />}
           </>
         )}
       </div>

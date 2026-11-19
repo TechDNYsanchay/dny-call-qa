@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseTldvMeeting } from "@/lib/tldv";
-import { calendarEvent, isSalesTitle, meetCode, meetingLinkMessage, meetingTitle, parseBookingForm, whenText } from "./booking";
+import { calendarEvent, existingMeetingEvent, isSalesTitle, meetCode, meetingLinkMessage, meetingTitle, parseBookingForm, parseExistingMeetingForm, whenText } from "./booking";
 
 // Wednesday 4 Nov 2026, 10:00 IST.
 const NOW = Date.parse("2026-11-04T10:00:00+05:30");
@@ -107,5 +107,42 @@ describe("the WhatsApp message with the link", () => {
     const text = meetingLinkMessage("Rohit Kapoor", "2026-11-05T16:30:00+05:30", "https://meet.google.com/ktu-gjvh-vmf");
     expect(text).toMatch(/^Hi Rohit, your video call with DNY Hospitality is fixed for Thursday 5 Nov at 4:30 pm\. Join here: https:\/\/meet\.google\.com\/ktu-gjvh-vmf /);
     expect(text).toMatch(/– DNY Hospitality$/);
+  });
+});
+
+describe("adding an existing meeting", () => {
+  const NOW = Date.parse("2026-11-19T13:00:00+05:30");
+  const form = (over: Record<string, string> = {}) => ({
+    meetLink: "https://meet.google.com/arj-csyw-exe?authuser=0",
+    clientName: "Jinal",
+    clientEmail: "",
+    date: "2026-11-19",
+    time: "16:00",
+    durationMin: "45",
+    consultantId: "8f0e7a7e-3b1c-4c55-9a51-2a6f0f4f9d10",
+    ...over,
+  });
+
+  it("reads the Meet code from the link and keeps the client's email optional", () => {
+    const r = parseExistingMeetingForm(form(), NOW);
+    expect(r.ok && r.value).toMatchObject({ meetCode: "arj-csyw-exe", meetUrl: "https://meet.google.com/arj-csyw-exe", clientEmail: null, startsAt: "2026-11-19T16:00:00+05:30" });
+  });
+
+  it("refuses a link that isn't a Meet link, a DNY email, and a meeting that started long ago", () => {
+    expect(parseExistingMeetingForm(form({ meetLink: "https://zoom.us/j/123" }), NOW)).toMatchObject({ ok: false, errors: { meetLink: expect.any(String) } });
+    expect(parseExistingMeetingForm(form({ clientEmail: "nikita@dnyhospitality.com" }), NOW)).toMatchObject({ ok: false, errors: { clientEmail: expect.any(String) } });
+    expect(parseExistingMeetingForm(form({ time: "12:00" }), NOW)).toMatchObject({ ok: false, errors: { time: expect.any(String) } });
+    expect(parseExistingMeetingForm(form({ time: "12:50" }), NOW).ok).toBe(true);
+  });
+
+  it("copies the meeting with its own Meet as the video call and the client as a silent guest", () => {
+    const r = parseExistingMeetingForm(form({ clientEmail: "Jinal@Example.com" }), NOW);
+    if (!r.ok) throw new Error("expected a valid form");
+    const event = existingMeetingEvent(r.value);
+    expect(event.summary).toBe("Vision call: Jinal × DNY Hospitality");
+    expect(event.attendees).toEqual([{ email: "jinal@example.com", displayName: "Jinal" }]);
+    expect(event.conferenceData).toMatchObject({ conferenceId: "arj-csyw-exe", conferenceSolution: { key: { type: "hangoutsMeet" } } });
+    expect(existingMeetingEvent(r.value, false)).not.toHaveProperty("conferenceData");
+    expect(existingMeetingEvent(r.value, false).location).toBe("https://meet.google.com/arj-csyw-exe");
   });
 });

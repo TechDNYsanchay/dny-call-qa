@@ -113,9 +113,24 @@ export async function createMeeting(event: object): Promise<{ eventId: string; m
   return { eventId: json.id!, meetUrl: json.hangoutLink, meetCode: code };
 }
 
-/** Cancels the event and emails the guests; an event already gone counts as cancelled. */
-export async function cancelMeeting(eventId: string): Promise<void> {
-  const response = await calendar(`/${encodeURIComponent(eventId)}?sendUpdates=all`, { method: "DELETE" });
+/**
+ * Puts a copy of a meeting set up elsewhere on the calendar, emailing nobody, with its existing Meet as
+ * the video call. If Google won't attach that Meet, the copy keeps the link in its location instead.
+ */
+export async function addExistingMeeting(withVideo: object, withoutVideo: object): Promise<{ eventId: string; videoAttached: boolean }> {
+  const response = await calendar("?conferenceDataVersion=1&sendUpdates=none", { method: "POST", body: withVideo });
+  const json = (await response.json().catch(() => ({}))) as EventJson;
+  if (response.ok && json.id) return { eventId: json.id, videoAttached: Boolean(json.hangoutLink || json.conferenceData?.conferenceId) };
+  if (response.status !== 400) throw new Error(`Google Calendar: ${json.error?.message ?? `HTTP ${response.status}`}`);
+  const again = await calendar("?sendUpdates=none", { method: "POST", body: withoutVideo });
+  const plain = (await again.json().catch(() => ({}))) as EventJson;
+  if (!again.ok || !plain.id) throw new Error(`Google Calendar: ${plain.error?.message ?? json.error?.message ?? `HTTP ${again.status}`}`);
+  return { eventId: plain.id, videoAttached: false };
+}
+
+/** Cancels the event, emailing the guests unless `notify` is false; an event already gone counts as cancelled. */
+export async function cancelMeeting(eventId: string, notify = true): Promise<void> {
+  const response = await calendar(`/${encodeURIComponent(eventId)}?sendUpdates=${notify ? "all" : "none"}`, { method: "DELETE" });
   if (!response.ok && response.status !== 404 && response.status !== 410) {
     const json = (await response.json().catch(() => ({}))) as EventJson;
     throw new Error(`Google Calendar: ${json.error?.message ?? `HTTP ${response.status}`}`);

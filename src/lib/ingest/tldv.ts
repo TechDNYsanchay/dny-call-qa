@@ -19,23 +19,26 @@ export type StoreOutcome = "inserted" | "updated" | "unchanged" | "internal" | "
 export type TranscriptSource = SpeakerTurn[] | null | (() => Promise<SpeakerTurn[] | null>);
 
 type Db = ReturnType<typeof supabaseAdmin>;
-type Booking = { id: string; consultant_id: string | null; lead_id: string | null; client_name: string };
+type Booking = { id: string; consultant_id: string | null; lead_id: string | null; client_name: string; client_email: string };
 
 /** Days either side of the vision-call date fixed on a first call that a meeting still counts. */
 const VC_DATE_SLACK_DAYS = 3;
 
+/** The meeting booked (or added) in the app with this Meet code, if any. */
+async function bookingFor(db: Db, code: string | null): Promise<Booking | null> {
+  if (!code) return null;
+  const { data, error } = await db.from("meeting_bookings").select("id, consultant_id, lead_id, client_name, client_email").eq("meet_code", code).eq("status", "booked").maybeSingle();
+  if (error) throw new Error(`booking: ${error.message}`);
+  return data;
+}
+
 /**
- * Whether a recorded meeting is a sales meeting (a vision call), and its booking when it was booked
- * from the app. Client meetings and anything else are left to the call-to-action app.
+ * Whether a meeting that wasn't booked in the app is still a sales meeting (a vision call): its title
+ * says so, or the client's first call fixed a vision call around this date. Client meetings and
+ * anything else are left to the call-to-action app.
  */
-async function salesMeeting(db: Db, meeting: TldvMeeting, clientEmail: string): Promise<{ booking: Booking | null } | null> {
-  if (meeting.meetCode) {
-    const { data, error } = await db.from("meeting_bookings").select("id, consultant_id, lead_id, client_name").eq("meet_code", meeting.meetCode).eq("status", "booked").maybeSingle();
-    if (error) throw new Error(`booking: ${error.message}`);
-    if (data) return { booking: data };
-  }
-  if (isSalesTitle(meeting.title)) return { booking: null };
-  // A lead whose first call fixed a vision call around this date.
+async function salesMeeting(db: Db, meeting: TldvMeeting, clientEmail: string): Promise<boolean> {
+  if (isSalesTitle(meeting.title)) return true;
   const day = meeting.startedAt.slice(0, 10);
   const { data, error } = await db
     .from("leads")
@@ -45,14 +48,19 @@ async function salesMeeting(db: Db, meeting: TldvMeeting, clientEmail: string): 
     .lte("first_call_capture->>vcDate", addDays(day, VC_DATE_SLACK_DAYS))
     .limit(1);
   if (error) throw new Error(`lead: ${error.message}`);
-  return data.length ? { booking: null } : null;
+  return data.length > 0;
 }
 
 export async function storeTldvMeeting(meeting: TldvMeeting, source: TranscriptSource): Promise<StoreOutcome> {
-  // A meeting with nobody from outside DNY is internal, not a vision call.
-  const client = clientsOf(meeting)[0];
-  if (!client?.email) return "internal";
   const db = supabaseAdmin();
+  // Booked or added in the app: a sales meeting, even when tl;dv lists no outside guest (a meeting
+  // added by its Meet link may carry none); the booking then says who the client is.
+  const booking = await bookingFor(db, meeting.meetCode);
+  const invited = clientsOf(meeting)[0];
+  const clientEmail = invited?.email ?? (booking?.client_email || null);
+  const clientName = invited?.name ?? booking?.client_name ?? null;
+  // Otherwise a meeting with nobody from outside DNY is internal, not a vision call.
+  if (!clientEmail && !booking) return "internal";
 
   const { data: existing, error: existingError } = await db
     .from("calls")
@@ -62,8 +70,8 @@ export async function storeTldvMeeting(meeting: TldvMeeting, source: TranscriptS
     .maybeSingle();
   if (existingError) throw new Error(`call: ${existingError.message}`);
   // A meeting already stored is a vision call; a new one is stored only when it's a sales meeting.
-  const sales = existing ? { booking: null } : await salesMeeting(db, meeting, client.email);
-  if (!sales) return "not_sales";
+  if (!existing && !booking && !(await salesMeeting(db, meeting, clientEmail!))) return "not_sales";
+  const sales = { booking: existing ? null : booking };
 
   // The consultant is the one booked, else whoever on the team list has the organiser's (or an invitee's) tl;dv email.
   const emails = [meeting.organizer.email, ...meeting.invitees.map((p) => p.email)].filter((e): e is string => Boolean(e));
@@ -73,13 +81,13 @@ export async function storeTldvMeeting(meeting: TldvMeeting, source: TranscriptS
 
   // One lead per client email (stored lowercase); an existing lead is kept as it is.
   let leadId = sales.booking?.lead_id ?? null;
-  if (!leadId) {
-    const { data: leads, error: leadError } = await db.from("leads").select("id").eq("email", client.email).limit(1);
+  if (!leadId && clientEmail) {
+    const { data: leads, error: leadError } = await db.from("leads").select("id").eq("email", clientEmail).limit(1);
     if (leadError) throw new Error(`lead: ${leadError.message}`);
     leadId = leads[0]?.id ?? null;
   }
   if (!leadId) {
-    const { data, error } = await db.from("leads").insert({ email: client.email, name: client.name ?? sales.booking?.client_name ?? null }).select("id").single();
+    const { data, error } = await db.from("leads").insert({ email: clientEmail, name: clientName }).select("id").single();
     if (error) throw new Error(`lead: ${error.message}`);
     leadId = data.id;
   }
@@ -97,7 +105,7 @@ export async function storeTldvMeeting(meeting: TldvMeeting, source: TranscriptS
         source_id: meeting.sourceId,
         person_id: personId,
         lead_id: leadId,
-        client_email: client.email,
+        client_email: clientEmail,
         started_at: meeting.startedAt,
         duration_sec: meeting.durationSec,
         recording_status: "available",

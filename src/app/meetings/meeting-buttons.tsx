@@ -28,7 +28,7 @@ export function CopyLinkButton({ text, label = "Copy link" }: { text: string; la
 }
 
 /** Cancels the meeting after a confirm: Google emails the guests a cancellation. */
-export function CancelMeetingButton({ id, client }: { id: string; client: string }) {
+export function CancelMeetingButton({ id, client, existing = false }: { id: string; client: string; existing?: boolean }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -38,7 +38,10 @@ export function CancelMeetingButton({ id, client }: { id: string; client: string
         disabled={pending}
         className={`${BUTTON} text-critical-ink`}
         onClick={() => {
-          if (!window.confirm(`Cancel the meeting with ${client}? Everyone invited gets a cancellation email.`)) return;
+          const ask = existing
+            ? `Remove the meeting with ${client} from the app? Only the recording calendar's copy goes, so tl;dv won't record it; the meeting itself and its invites stay.`
+            : `Cancel the meeting with ${client}? Everyone invited gets a cancellation email.`;
+          if (!window.confirm(ask)) return;
           start(async () => {
             setError(null);
             const result = await cancelBooking(id);
@@ -46,7 +49,7 @@ export function CancelMeetingButton({ id, client }: { id: string; client: string
           });
         }}
       >
-        {pending ? "Cancelling…" : "Cancel"}
+        {pending ? (existing ? "Removing…" : "Cancelling…") : existing ? "Remove" : "Cancel"}
       </button>
       {error && (
         <span role="alert" className="text-xs text-critical-ink">

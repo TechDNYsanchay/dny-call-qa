@@ -160,3 +160,110 @@ export function meetingLinkMessage(clientName: string, startsAt: string, meetUrl
   const hi = /^\p{L}{2,}$/u.test(first) ? `Hi ${first}` : "Hi";
   return `${hi}, your video call with DNY Hospitality is fixed for ${whenText(startsAt)}. Join here: ${meetUrl} You'll also get a calendar invite by email. Looking forward to it! – DNY Hospitality`;
 }
+
+// ---------------------------------------------------------------------------
+// Meetings set up outside the app (on someone's own calendar), added by their Meet link
+// ---------------------------------------------------------------------------
+
+const ExistingFormSchema = z.object({
+  meetLink: z.string().trim().refine((v) => meetCode(v) !== null, "Paste the Google Meet link, like meet.google.com/abc-defg-hij"),
+  clientName: text(80).min(2, "Add the client's name"),
+  clientEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .pipe(z.email("Check the client's email"))
+    .refine((e) => !e.endsWith(`@${DNY_EMAIL_DOMAIN}`), "Use the client's own email, not a DNY one")
+    .optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Pick a time"),
+  durationMin: z.coerce.number().refine((n) => (DURATIONS as readonly number[]).includes(n), "Pick a length"),
+  consultantId: z.string().regex(UUID, "Pick who takes the meeting"),
+  notes: text(500).optional(),
+});
+
+export interface ExistingMeetingRequest {
+  meetCode: string;
+  meetUrl: string;
+  clientName: string;
+  /** Lets tl;dv see an outside guest, so it records by itself; null when not given. */
+  clientEmail: string | null;
+  /** ISO timestamp, IST offset. */
+  startsAt: string;
+  durationMin: number;
+  consultantId: string;
+  notes: string | null;
+}
+
+export type ExistingFieldErrors = Partial<Record<keyof z.infer<typeof ExistingFormSchema> | "form", string>>;
+
+/** Checks the "add an existing meeting" form; the meeting may have started up to 15 minutes ago. */
+export function parseExistingMeetingForm(
+  form: Record<string, FormDataEntryValue | null>,
+  nowMs: number,
+): { ok: true; value: ExistingMeetingRequest } | { ok: false; errors: ExistingFieldErrors } {
+  const raw = {
+    meetLink: form.meetLink ?? "",
+    clientName: form.clientName ?? "",
+    clientEmail: (form.clientEmail as string) || undefined,
+    date: form.date ?? "",
+    time: form.time ?? "",
+    durationMin: form.durationMin ?? DEFAULT_DURATION,
+    consultantId: form.consultantId ?? "",
+    notes: (form.notes as string) || undefined,
+  };
+  const parsed = ExistingFormSchema.safeParse(raw);
+  if (!parsed.success) {
+    const errors: ExistingFieldErrors = {};
+    for (const issue of parsed.error.issues) errors[issue.path[0] as keyof ExistingFieldErrors] ??= issue.message;
+    return { ok: false, errors };
+  }
+  const v = parsed.data;
+  const startsAt = `${v.date}T${v.time}:00+05:30`;
+  const startMs = Date.parse(startsAt);
+  if (startMs < nowMs - 15 * 60_000) return { ok: false, errors: { time: "This meeting has already started; add it before it starts so tl;dv can join" } };
+  if (startMs > nowMs + MAX_DAYS_AHEAD * 86_400_000) return { ok: false, errors: { date: "Pick a date within the next four months" } };
+  const code = meetCode(v.meetLink)!;
+  return {
+    ok: true,
+    value: {
+      meetCode: code,
+      meetUrl: `https://meet.google.com/${code}`,
+      clientName: v.clientName,
+      clientEmail: v.clientEmail ?? null,
+      startsAt,
+      durationMin: v.durationMin,
+      consultantId: v.consultantId,
+      notes: v.notes || null,
+    },
+  };
+}
+
+/**
+ * The copy on the recording account's calendar (Events: insert with conferenceDataVersion=1 and no
+ * emails): the existing Meet as its video call, so tl;dv's bot joins it. The client, when given, is a
+ * guest so tl;dv sees an outside participant; the title marks it as a sales meeting.
+ */
+export function existingMeetingEvent(m: Pick<ExistingMeetingRequest, "meetCode" | "meetUrl" | "clientName" | "clientEmail" | "startsAt" | "durationMin" | "notes">, withVideo = true) {
+  const start = new Date(m.startsAt);
+  const end = new Date(start.getTime() + m.durationMin * 60_000);
+  return {
+    summary: meetingTitle(m.clientName),
+    description: [`Added to DNY Sales Agent so tl;dv records it. Join: ${m.meetUrl}`, m.notes].filter(Boolean).join("\n\n"),
+    location: m.meetUrl,
+    start: { dateTime: start.toISOString(), timeZone: "Asia/Kolkata" },
+    end: { dateTime: end.toISOString(), timeZone: "Asia/Kolkata" },
+    attendees: m.clientEmail ? [{ email: m.clientEmail, displayName: m.clientName }] : [],
+    guestsCanInviteOthers: false,
+    guestsCanSeeOtherGuests: false,
+    ...(withVideo
+      ? {
+          conferenceData: {
+            conferenceId: m.meetCode,
+            conferenceSolution: { key: { type: "hangoutsMeet" } },
+            entryPoints: [{ entryPointType: "video", uri: m.meetUrl, label: `meet.google.com/${m.meetCode}` }],
+          },
+        }
+      : {}),
+  };
+}

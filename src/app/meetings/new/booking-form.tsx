@@ -141,7 +141,7 @@ function Form({ hosts, defaultHost, defaults, lead, meHasEmail, onAnother }: Pro
   );
 }
 
-function Field({ label, error, hint, className = "", children }: { label: string; error?: string; hint?: string; className?: string; children: ReactNode }) {
+export function Field({ label, error, hint, className = "", children }: { label: string; error?: string; hint?: string; className?: string; children: ReactNode }) {
   return (
     <label className={`block text-sm ${className}`}>
       <span className="mb-1 block text-xs text-muted">{label}</span>

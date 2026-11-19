@@ -46,7 +46,7 @@ async function NewMeeting({ searchParams }: Pick<PageProps<"/meetings/new">, "se
       </Link>
       <PageHeader
         title="Book a sales meeting"
-        subtitle="The client, the person taking the meeting and you get a Google Calendar invite with the Meet link. tl;dv records it, and it's scored the same night."
+        subtitle="The client, the person taking the meeting and you get a Google Calendar invite with the Meet link. tl;dv records it, and it's scored minutes after it ends."
       />
       <Card>
         {!ready ? (

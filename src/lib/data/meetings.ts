@@ -21,6 +21,8 @@ export interface BookingRow {
   meetUrl: string | null;
   status: "booked" | "cancelled";
   leadId: string | null;
+  /** Set up on someone's own calendar and added by its Meet link. */
+  existing: boolean;
   call: { id: string; score: number | null; band: Band | null; scoringStatus: string } | null;
 }
 
@@ -36,6 +38,7 @@ type Row = {
   meet_url: string | null;
   status: "booked" | "cancelled";
   lead_id: string | null;
+  existing: boolean;
   call_id: string | null;
   consultant: { full_name: string } | null;
   booker: { full_name: string } | null;
@@ -47,7 +50,7 @@ export async function listBookings(me: Me, days = 30): Promise<BookingRow[]> {
   let query = supabaseAdmin()
     .from("meeting_bookings")
     .select(
-      `id, client_name, client_email, client_phone, starts_at, duration_min, consultant_id, booked_by, meet_url, status, lead_id, call_id,
+      `id, client_name, client_email, client_phone, starts_at, duration_min, consultant_id, booked_by, meet_url, status, lead_id, existing, call_id,
        consultant:people!meeting_bookings_consultant_id_fkey ( full_name ),
        booker:people!meeting_bookings_booked_by_fkey ( full_name ),
        calls ( scoring_status, call_scores ( score, band ) )`,
@@ -70,6 +73,7 @@ export async function listBookings(me: Me, days = 30): Promise<BookingRow[]> {
     meetUrl: r.meet_url,
     status: r.status,
     leadId: r.lead_id,
+    existing: r.existing,
     call: r.call_id && r.calls
       ? { id: r.call_id, score: r.calls.call_scores ? Number(r.calls.call_scores.score) : null, band: r.calls.call_scores?.band ?? null, scoringStatus: r.calls.scoring_status }
       : null,
