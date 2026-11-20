@@ -115,7 +115,8 @@ function result(r: BookingRow, nowMs: number, endMs: number) {
   if (r.call)
     return (
       <Link href={`/calls/${r.call.id}`} className="text-muted hover:text-foreground hover:underline">
-        Recorded · being scored
+        {/* Under 2 minutes, or found not to be a sales call: the call page says which. */}
+        {r.call.scoringStatus === "not_eligible" ? "Recorded · not scored" : "Recorded · being scored"}
       </Link>
     );
   if (nowMs - endMs > RECORDING_GRACE_MS) return <StatusLabel band="amber">Not recorded</StatusLabel>;
