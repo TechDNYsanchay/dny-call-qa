@@ -74,7 +74,7 @@ Shared between the two apps (one per project):
 
 Link this checkout once with `npx supabase link --project-ref iaxjxefipmdumfukttvv`.
 
-Until 26 Nov 2026 Sales QA had its own project, `dny-call-qa` (ref `jlqppprkvlwhtbvhgiik`). Its data was copied here and that project was renamed `trs` (kept for TRS; its old copy of Sales QA's data stays until it is cleared).
+Until 26 Nov 2026 Sales QA had its own project, `dny-call-qa` (ref `jlqppprkvlwhtbvhgiik`). Its data and recordings were copied here and that project was deleted the same day.
 
 ## Repositories
 
