@@ -7,7 +7,8 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SECRET_KEY;
 if (!url || !key) throw new Error("Run with --env-file=.env.local (NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY)");
 
-export const db = createClient<Database>(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+// Sales QA's tables live in schema qa (the Supabase project is shared with Call to Action, which owns public).
+export const db = createClient<Database, "qa">(url, key, { db: { schema: "qa" }, auth: { persistSession: false, autoRefreshToken: false } });
 
 export const SAMPLE_EMAIL_DOMAIN = "sample.invalid";
 

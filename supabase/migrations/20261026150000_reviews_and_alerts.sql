@@ -2,6 +2,9 @@
 -- `hard_fails` become the reviewed values; the ai_* columns keep what the AI gave, so agreement can
 -- be measured. overridden_by is the reviewer and override_reason their note (already in place);
 -- record_call_score never overwrites a reviewed score.
+
+set search_path = qa, extensions;
+
 alter table call_scores
   add column ai_score numeric(4, 1),
   add column ai_band score_band,

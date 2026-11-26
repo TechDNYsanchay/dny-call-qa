@@ -1,4 +1,7 @@
 -- One row per report email sent, so re-running the 8 am job never sends the same report twice.
+
+set search_path = qa, extensions;
+
 create table report_sends (
   report_date date not null,
   kind text not null check (kind in ('person', 'team')),

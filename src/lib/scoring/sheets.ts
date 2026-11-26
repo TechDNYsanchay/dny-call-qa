@@ -56,7 +56,7 @@ function toSheet(stream: Stream, row: Row): Sheet | null {
 }
 
 /** The latest published version of a stream's sheet (the one scoring uses). */
-export async function activeSheet(db: SupabaseClient<Database>, stream: Stream): Promise<Sheet> {
+export async function activeSheet(db: SupabaseClient<Database, "qa">, stream: Stream): Promise<Sheet> {
   const { data, error } = await db
     .from("reference_versions")
     .select("id, version, label, questions, storage_path, created_at")
@@ -69,7 +69,7 @@ export async function activeSheet(db: SupabaseClient<Database>, stream: Stream):
 }
 
 /** A specific version (what an older call was scored against), else the built-in list. */
-export async function sheetVersion(db: SupabaseClient<Database>, stream: Stream, versionId: string | null | undefined): Promise<Sheet> {
+export async function sheetVersion(db: SupabaseClient<Database, "qa">, stream: Stream, versionId: string | null | undefined): Promise<Sheet> {
   if (!versionId) return builtInSheet(stream);
   const { data, error } = await db.from("reference_versions").select("id, version, label, questions, storage_path, created_at").eq("id", versionId).maybeSingle();
   if (error) throw new Error(`call sheet version: ${error.message}`);

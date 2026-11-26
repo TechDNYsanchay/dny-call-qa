@@ -1,3 +1,5 @@
+{{/* Shared by Call to Action and Sales QA (one Supabase project). Sales QA sign-ins redirect to its own origin; everything else gets the Call to Action email. Keep this file identical in both repos. */}}
+{{ if or (eq (printf "%.30s" .RedirectTo) "https://dny-call-qa.vercel.app") (eq (printf "%.21s" .RedirectTo) "http://localhost:3100") }}
 <div style="font-family: Arial, Helvetica, sans-serif; color: #1c1c1a; max-width: 480px">
   <h2 style="margin: 0 0 12px">Sign in to DNY Sales Agent</h2>
   <p style="margin: 0 0 16px">Click the button to sign in. The link works once and expires in an hour.</p>
@@ -10,3 +12,62 @@
   </p>
   <p style="margin: 0; color: #6b6b65; font-size: 13px">If you didn't ask to sign in, you can ignore this email.</p>
 </div>
+{{ else }}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Your Call to Action sign-in link</title>
+  </head>
+  <body style="margin: 0; padding: 0; background: #e8ebe7; font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; color: #14201a">
+    <!-- Shift Sheet: one white sheet on the canvas, ink button, nothing else. Table layout for email clients. -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #e8ebe7">
+      <tr>
+        <td align="center" style="padding: 32px 16px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 480px">
+            <tr>
+              <td style="padding: 0 4px 16px">
+                <div style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: #14201a">Call to Action</div>
+                <div style="font-size: 13px; line-height: 18px; color: #7b867f">DNY Hospitality</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background: #ffffff; border: 1px solid #d3d8d1; border-radius: 10px; padding: 24px">
+                <h1 style="margin: 0 0 12px; font-size: 20px; line-height: 26px; font-weight: 600; color: #14201a">Your sign-in link</h1>
+                <p style="margin: 0 0 20px; font-size: 15px; line-height: 22px; color: #4f5b54">
+                  Tap the button to sign in to Call to Action. The link works once and expires in an hour.
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="background: #14201a; border-radius: 6px">
+                      <a
+                        href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=magiclink&next=/meetings"
+                        style="display: inline-block; padding: 12px 20px; font-size: 14px; font-weight: 500; color: #ffffff; text-decoration: none"
+                        >Sign in to Call to Action</a
+                      >
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin: 20px 0 0; font-size: 13px; line-height: 18px; color: #7b867f">
+                  If the button does not work, copy this address into your browser:<br />
+                  <span style="word-break: break-all; font-family: 'IBM Plex Mono', Menlo, Consolas, monospace; font-size: 12px; color: #4f5b54"
+                    >{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=magiclink&next=/meetings</span
+                  >
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 16px 4px 0; font-size: 13px; line-height: 18px; color: #7b867f">
+                You received this because someone entered {{ .Email }} on the sign-in page. If that was not you, ignore this email; nothing happens
+                without the link.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+{{ end }}

@@ -1,4 +1,7 @@
 -- App settings edited on the Team members page, e.g. where reports go while testing.
+
+set search_path = qa, extensions;
+
 create table app_settings (
   key text primary key,
   value jsonb,

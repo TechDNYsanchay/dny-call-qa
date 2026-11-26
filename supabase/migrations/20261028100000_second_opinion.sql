@@ -1,6 +1,9 @@
 -- A second, independent scoring of calls that are Red or close to a band line, done by a later
 -- run of the scoring routine. The first score stands; when the two disagree (more than 10 points,
 -- or a hard fail only one of them found) the call is flagged for a founder's look until reviewed.
+
+set search_path = qa, extensions;
+
 alter table call_scores add column second_opinion jsonb;
 
 comment on column call_scores.second_opinion is

@@ -37,7 +37,7 @@ export type Database = {
       [_ in never]: never
     }
   }
-  public: {
+  qa: {
     Tables: {
       alert_log: {
         Row: {
@@ -186,11 +186,11 @@ export type Database = {
       }
       call_scores: {
         Row: {
-          ai_band: Database["public"]["Enums"]["score_band"] | null
+          ai_band: Database["qa"]["Enums"]["score_band"] | null
           ai_hard_fails: string[] | null
           ai_levels: Json | null
           ai_score: number | null
-          band: Database["public"]["Enums"]["score_band"]
+          band: Database["qa"]["Enums"]["score_band"]
           call_id: string
           dispute_comment: string | null
           dispute_resolved_at: string | null
@@ -211,11 +211,11 @@ export type Database = {
           second_opinion: Json | null
         }
         Insert: {
-          ai_band?: Database["public"]["Enums"]["score_band"] | null
+          ai_band?: Database["qa"]["Enums"]["score_band"] | null
           ai_hard_fails?: string[] | null
           ai_levels?: Json | null
           ai_score?: number | null
-          band: Database["public"]["Enums"]["score_band"]
+          band: Database["qa"]["Enums"]["score_band"]
           call_id: string
           dispute_comment?: string | null
           dispute_resolved_at?: string | null
@@ -236,11 +236,11 @@ export type Database = {
           second_opinion?: Json | null
         }
         Update: {
-          ai_band?: Database["public"]["Enums"]["score_band"] | null
+          ai_band?: Database["qa"]["Enums"]["score_band"] | null
           ai_hard_fails?: string[] | null
           ai_levels?: Json | null
           ai_score?: number | null
-          band?: Database["public"]["Enums"]["score_band"]
+          band?: Database["qa"]["Enums"]["score_band"]
           call_id?: string
           dispute_comment?: string | null
           dispute_resolved_at?: string | null
@@ -302,18 +302,18 @@ export type Database = {
           person_id: string | null
           recording_path: string | null
           recording_source_url: string | null
-          recording_status: Database["public"]["Enums"]["recording_status"]
-          scoring_status: Database["public"]["Enums"]["scoring_status"]
-          source: Database["public"]["Enums"]["call_source"]
+          recording_status: Database["qa"]["Enums"]["recording_status"]
+          scoring_status: Database["qa"]["Enums"]["scoring_status"]
+          source: Database["qa"]["Enums"]["call_source"]
           source_id: string
           started_at: string
-          stream: Database["public"]["Enums"]["call_stream"]
+          stream: Database["qa"]["Enums"]["call_stream"]
           transcribed_at: string | null
           transcript_attempts: number
           transcript_error: string | null
           transcript_provider: string | null
           transcript_started_at: string | null
-          transcript_status: Database["public"]["Enums"]["transcript_status"]
+          transcript_status: Database["qa"]["Enums"]["transcript_status"]
         }
         Insert: {
           agent_phone?: string | null
@@ -332,18 +332,18 @@ export type Database = {
           person_id?: string | null
           recording_path?: string | null
           recording_source_url?: string | null
-          recording_status?: Database["public"]["Enums"]["recording_status"]
-          scoring_status?: Database["public"]["Enums"]["scoring_status"]
-          source: Database["public"]["Enums"]["call_source"]
+          recording_status?: Database["qa"]["Enums"]["recording_status"]
+          scoring_status?: Database["qa"]["Enums"]["scoring_status"]
+          source: Database["qa"]["Enums"]["call_source"]
           source_id: string
           started_at: string
-          stream: Database["public"]["Enums"]["call_stream"]
+          stream: Database["qa"]["Enums"]["call_stream"]
           transcribed_at?: string | null
           transcript_attempts?: number
           transcript_error?: string | null
           transcript_provider?: string | null
           transcript_started_at?: string | null
-          transcript_status?: Database["public"]["Enums"]["transcript_status"]
+          transcript_status?: Database["qa"]["Enums"]["transcript_status"]
         }
         Update: {
           agent_phone?: string | null
@@ -362,18 +362,18 @@ export type Database = {
           person_id?: string | null
           recording_path?: string | null
           recording_source_url?: string | null
-          recording_status?: Database["public"]["Enums"]["recording_status"]
-          scoring_status?: Database["public"]["Enums"]["scoring_status"]
-          source?: Database["public"]["Enums"]["call_source"]
+          recording_status?: Database["qa"]["Enums"]["recording_status"]
+          scoring_status?: Database["qa"]["Enums"]["scoring_status"]
+          source?: Database["qa"]["Enums"]["call_source"]
           source_id?: string
           started_at?: string
-          stream?: Database["public"]["Enums"]["call_stream"]
+          stream?: Database["qa"]["Enums"]["call_stream"]
           transcribed_at?: string | null
           transcript_attempts?: number
           transcript_error?: string | null
           transcript_provider?: string | null
           transcript_started_at?: string | null
-          transcript_status?: Database["public"]["Enums"]["transcript_status"]
+          transcript_status?: Database["qa"]["Enums"]["transcript_status"]
         }
         Relationships: [
           {
@@ -671,7 +671,7 @@ export type Database = {
           email: string | null
           full_name: string
           id: string
-          role: Database["public"]["Enums"]["person_role"]
+          role: Database["qa"]["Enums"]["person_role"]
           tldv_email: string | null
         }
         Insert: {
@@ -682,7 +682,7 @@ export type Database = {
           email?: string | null
           full_name: string
           id?: string
-          role: Database["public"]["Enums"]["person_role"]
+          role: Database["qa"]["Enums"]["person_role"]
           tldv_email?: string | null
         }
         Update: {
@@ -693,7 +693,7 @@ export type Database = {
           email?: string | null
           full_name?: string
           id?: string
-          role?: Database["public"]["Enums"]["person_role"]
+          role?: Database["qa"]["Enums"]["person_role"]
           tldv_email?: string | null
         }
         Relationships: []
@@ -703,7 +703,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
-          kind: Database["public"]["Enums"]["reference_kind"]
+          kind: Database["qa"]["Enums"]["reference_kind"]
           label: string
           notes: string | null
           questions: Json | null
@@ -714,7 +714,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          kind: Database["public"]["Enums"]["reference_kind"]
+          kind: Database["qa"]["Enums"]["reference_kind"]
           label: string
           notes?: string | null
           questions?: Json | null
@@ -725,7 +725,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          kind?: Database["public"]["Enums"]["reference_kind"]
+          kind?: Database["qa"]["Enums"]["reference_kind"]
           label?: string
           notes?: string | null
           questions?: Json | null
@@ -837,7 +837,7 @@ export type Database = {
       }
       record_call_score: {
         Args: {
-          p_band: Database["public"]["Enums"]["score_band"]
+          p_band: Database["qa"]["Enums"]["score_band"]
           p_call_id: string
           p_hard_fails: string[]
           p_levels: Json
@@ -853,7 +853,7 @@ export type Database = {
         Args: {
           p_capture: Json
           p_lead_id: string
-          p_stream: Database["public"]["Enums"]["call_stream"]
+          p_stream: Database["qa"]["Enums"]["call_stream"]
         }
         Returns: undefined
       }
@@ -895,7 +895,7 @@ export type Database = {
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "qa">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
@@ -1014,7 +1014,7 @@ export const Constants = {
   graphql_public: {
     Enums: {},
   },
-  public: {
+  qa: {
     Enums: {
       call_source: ["callyzer", "tldv", "upload"],
       call_stream: ["first_call", "vision_call"],

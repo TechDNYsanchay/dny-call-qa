@@ -6,6 +6,9 @@ import { cookies } from "next/headers";
 import type { Database } from "./database.types";
 import { retryingFetch } from "./retry-fetch";
 
+// Sales QA's tables live in schema qa: the Supabase project is shared with Call to Action, which owns public.
+export const DB_SCHEMA = "qa";
+
 function env(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | "SUPABASE_SECRET_KEY"): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} must be set (see .env.example)`);
@@ -21,7 +24,8 @@ export async function supabaseUser() {
   // The auth client reads the clock (session expiry). io() keeps that out of any prerender,
   // including per-user prefetches that have cookies; during a real request it resolves at once.
   await io();
-  return createServerClient<Database>(env("NEXT_PUBLIC_SUPABASE_URL"), env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"), {
+  return createServerClient<Database, typeof DB_SCHEMA>(env("NEXT_PUBLIC_SUPABASE_URL"), env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"), {
+    db: { schema: DB_SCHEMA },
     global: { fetch: retryingFetch },
     cookies: {
       getAll: () => cookieStore.getAll(),
@@ -41,7 +45,8 @@ export async function supabaseUser() {
  * acting for a viewer (the sign-in allowlist check, pipeline jobs). Never for rendering screens.
  */
 export function supabaseAdmin() {
-  return createClient<Database>(env("NEXT_PUBLIC_SUPABASE_URL"), env("SUPABASE_SECRET_KEY"), {
+  return createClient<Database, typeof DB_SCHEMA>(env("NEXT_PUBLIC_SUPABASE_URL"), env("SUPABASE_SECRET_KEY"), {
+    db: { schema: DB_SCHEMA },
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: retryingFetch },
   });

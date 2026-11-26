@@ -1,6 +1,9 @@
 -- One coaching focus per person at a time, set by a founder, manager or admin: a call-sheet
 -- question to ask on every call, or a scorecard area to get to Met. Progress is worked out from
 -- the scored calls; ending a focus keeps it for history.
+
+set search_path = qa, extensions;
+
 create table coaching_focus (
   id uuid primary key default gen_random_uuid(),
   person_id uuid not null references people (id) on delete cascade,

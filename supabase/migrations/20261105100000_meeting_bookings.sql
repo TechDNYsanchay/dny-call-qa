@@ -3,6 +3,8 @@
 -- so tl;dv's bot records the meeting. tl;dv sends the Meet code back with the recording, which ties
 -- the recording to its booking, its lead and its consultant.
 
+set search_path = qa, extensions;
+
 create table meeting_bookings (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid references leads (id) on delete set null,

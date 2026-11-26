@@ -1,4 +1,7 @@
 -- Missed client calls: when the executive was emailed about one, and when someone marked it handled.
+
+set search_path = qa, extensions;
+
 alter table calls
   add column missed_alerted_at timestamptz,
   add column missed_resolved_at timestamptz,

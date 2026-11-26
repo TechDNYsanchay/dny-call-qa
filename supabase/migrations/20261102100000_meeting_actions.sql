@@ -1,6 +1,9 @@
 -- The next steps agreed on a vision call (from its recap), so they can be ticked off, show on the
 -- follow-up list and go into the emails. The scoring pipeline writes them; people tick them off
 -- through the app, which checks who may (the consultant on the call, or a founder) before writing.
+
+set search_path = qa, extensions;
+
 create table meeting_actions (
   id uuid primary key default gen_random_uuid(),
   call_id uuid not null references calls (id) on delete cascade,

@@ -1,6 +1,9 @@
 -- Call sheet versions: each published version of FC-01 / LC-01 keeps its question list, so
 -- scoring follows the latest one and older scores show the questions they were scored against
 -- (call_scores.reference_version_ids).
+
+set search_path = qa, extensions;
+
 alter table reference_versions add column questions jsonb;
 
 -- Private bucket for the uploaded sheet PDFs (read through short-lived links).

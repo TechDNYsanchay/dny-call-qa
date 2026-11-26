@@ -2,6 +2,8 @@
 -- pipeline uses. Speaker roles (executive or client) stay 'unknown' here; the scoring
 -- run decides them from what each speaker says.
 
+set search_path = qa, extensions;
+
 alter table calls
   add column transcript_provider text,
   add column transcript_attempts smallint not null default 0,
@@ -22,7 +24,7 @@ create function claim_call_for_transcription(
   p_max_attempts integer default 3
 )
 returns table (call_id uuid, path text, duration integer, started timestamptz, attempt smallint)
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = qa as $$
 begin
   update calls
   set transcript_status = 'failed', transcript_error = coalesce(transcript_error, 'stopped responding')
@@ -57,7 +59,7 @@ $$;
 -- Replaces a call's transcript in one step and moves the call on to scoring.
 -- p_segments: [{ "speaker": "1", "startSec": 0.5, "endSec": 4.2, "text": "..." }, ...]
 create function save_transcript(p_call_id uuid, p_provider text, p_segments jsonb) returns void
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = qa as $$
 begin
   delete from transcript_segments where call_id = p_call_id;
   insert into transcript_segments (call_id, idx, speaker_label, start_sec, end_sec, text)

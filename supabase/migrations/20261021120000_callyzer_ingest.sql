@@ -1,5 +1,7 @@
 -- Callyzer ingest: what the webhook stores before transcription, and private storage for recordings.
 
+set search_path = qa, extensions;
+
 -- A call between arrival and scoring (recording download, transcription, scoring queue).
 alter type scoring_status add value if not exists 'waiting' before 'ready';
 

@@ -16,7 +16,7 @@ import { disagrees, SECOND_OPINION_AFTER_MIN, SECOND_OPINION_WITHIN_DAYS, wantsS
 import { areasFor, hardFailsFor, RUBRIC_VERSION } from "./scorecards";
 import { activeSheet, expectedFrom } from "./sheets";
 
-export type Db = SupabaseClient<Database>;
+export type Db = SupabaseClient<Database, "qa">;
 
 interface CallInfo {
   id: string;

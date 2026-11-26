@@ -1,0 +1,3 @@
+-- Placeholder: migration 20261121120100 (support_line_on) belongs to Call to Action (repo dny-call-to-action, schema public),
+-- which shares this Supabase project. It is applied from that repo; this empty file only lets
+-- `supabase db push` here see the shared migration history. Nothing to run.

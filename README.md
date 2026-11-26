@@ -7,7 +7,7 @@ Sales Call QA Agent for DNY Hospitality. It scores every first call (Callyzer) a
 
 ## Run locally
 
-Needs Node.js 20.9 or later and a filled-in `.env.local`. The screens read from the Supabase project `dny-call-qa` (Mumbai).
+Needs Node.js 20.9 or later and a filled-in `.env.local`. The screens read from schema `qa` of the shared Supabase project `dny-agents` (Mumbai; see [Database](#database)).
 
 ```bash
 npm install
@@ -33,18 +33,15 @@ npm run people -- deactivate --email name@dnyhospitality.com
 npm run people -- test-link --email founder@sample.invalid   # sign in as a sample account (no email sent)
 ```
 
-Founders, managers and admins see every call and report. Executives and consultants see only their own; the database enforces this with row-level security, not just the screens. The sign-in email template is `supabase/templates/magic_link.html` (pushed with `npx supabase config push`).
+Founders, managers and admins see every call and report. Executives and consultants see only their own; the database enforces this with row-level security, not just the screens. The sign-in email template is `supabase/templates/magic_link.html`, shared with Call to Action (see [Database](#database)).
 
-### Sign in with Google (one-time setup)
+### Sign in with Google
 
-1. In Google Cloud, create an OAuth client (type **Web application**) in a project owned by the DNY Google Workspace, with the consent screen audience set to **Internal** (only dnyhospitality.com accounts).
-   - Authorized JavaScript origins: `https://dny-call-qa.vercel.app`, `http://localhost:3100`
-   - Authorized redirect URI: `https://jlqppprkvlwhtbvhgiik.supabase.co/auth/v1/callback`
-2. Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.local`, then push them to Supabase without committing them:
-   `set -a; . ./.env.local; set +a; npx supabase config push`
-3. Set `GOOGLE_SIGN_IN=on` in `.env.local` and in Vercel, then redeploy to show the button.
+Google sign-in runs through the shared project's Google provider, which uses Call to Action's OAuth client (an Internal client in DNY's Google Workspace, redirect URI `https://iaxjxefipmdumfukttvv.supabase.co/auth/v1/callback`). `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.local` hold that client's values; they are only read by `npx supabase config push`, never by the app.
 
 Google only proves who someone is; they still need to be an active person on the team list (`npm run people -- add`) with the same email.
+
+`GOOGLE_SIGN_IN=on` in `.env.local` and in Vercel shows the button.
 
 ## What's where
 
@@ -58,6 +55,26 @@ Google only proves who someone is; they still need to be an active person on the
 | `vercel.json` | Mumbai region and the scheduled jobs (UTC times) |
 
 This is Next.js 16 with Cache Components: read `AGENTS.md` before changing pages or routes.
+
+## Database
+
+Sales QA shares one Supabase project with Call to Action (repo `TechDNYsanchay/DNY-call-to-action`): **`dny-agents`**, ref `iaxjxefipmdumfukttvv`, Mumbai, in tech@dnyhospitality.com's organisation. Each app has its own schema, so neither can see or change the other's tables:
+
+| Schema | Owner |
+| --- | --- |
+| `qa` | Sales QA (this repo). The Supabase clients set `db: { schema: "qa" }`; `npm run db:types` generates types for `qa` only. |
+| `public` | Call to Action. Never touch it from here. |
+
+Shared between the two apps (one per project):
+
+- **Logins** (`auth.users`). A person on both team lists has one login. Each app decides access from its own `people` table, so a login only gets in where that app lists the person as active. One exception: Call to Action's "remove person" also bans the login, which stops that person signing in here too until they are re-added there.
+- **Auth settings and the magic-link email.** `supabase/config.toml` and `supabase/templates/magic_link.html` hold the same settings in both repos (only `project_id` differs); change both together. The template picks Sales QA's email when the link returns to `dny-call-qa.vercel.app` or `localhost:3100`, Call to Action's otherwise.
+- **Migration history.** Both repos push to the same `supabase_migrations` table. `supabase/migrations/*_cta_*.sql` are empty placeholders for Call to Action's migrations, so `npx supabase db push` here sees the full history. When Call to Action adds a migration, add an empty `<version>_cta_<name>.sql` here before the next push (and Call to Action adds a `*_qa_*` placeholder for each new migration here). Every migration here starts with `set search_path = qa, extensions;`.
+- **Storage.** Sales QA's buckets are `recordings` and `references`; Call to Action's is `call-recordings`.
+
+Link this checkout once with `npx supabase link --project-ref iaxjxefipmdumfukttvv`.
+
+Until 26 Nov 2026 Sales QA had its own project, `dny-call-qa` (ref `jlqppprkvlwhtbvhgiik`). Its data was copied here and that project was renamed `trs` (kept for TRS; its old copy of Sales QA's data stays until it is cleared).
 
 ## Repositories
 

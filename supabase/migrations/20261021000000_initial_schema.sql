@@ -8,6 +8,16 @@
 --     only through record_call_score, record_lead_capture and mark_scoring_failed. It cannot change a
 --     lead's stage, owner or value (brief section 7).
 
+-- Sales QA shares its Supabase project with Call to Action (dny-call-to-action), which owns schema
+-- public. Everything Sales QA owns lives in schema qa; every migration here starts with
+-- `set search_path = qa, extensions` so unqualified names can never reach Call to Action's tables.
+create schema if not exists qa;
+grant usage on schema qa to anon, authenticated, service_role;
+alter default privileges for role postgres in schema qa grant all on tables to anon, authenticated, service_role;
+alter default privileges for role postgres in schema qa grant all on functions to anon, authenticated, service_role;
+alter default privileges for role postgres in schema qa grant all on sequences to anon, authenticated, service_role;
+set search_path = qa, extensions;
+
 create type person_role as enum ('founder', 'manager', 'executive', 'consultant', 'admin');
 create type call_stream as enum ('first_call', 'vision_call');
 create type call_source as enum ('callyzer', 'tldv', 'upload');
@@ -143,12 +153,12 @@ create table daily_reports (
 -- ---------------------------------------------------------------------------
 
 create function current_person_id() returns uuid
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = qa as $$
   select id from people where auth_user_id = auth.uid() and active
 $$;
 
 create function can_see_all() returns boolean
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = qa as $$
   select exists (
     select 1 from people
     where auth_user_id = auth.uid() and active and role in ('founder', 'manager', 'admin')
@@ -211,7 +221,7 @@ create function record_call_score(
   p_overrides text[],
   p_result jsonb
 ) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = qa as $$
 begin
   insert into call_scores (call_id, rubric_version, reference_version_ids, score, band, levels, hard_fails, overrides, result)
   values (p_call_id, p_rubric_version, p_reference_version_ids, p_score, p_band, p_levels, p_hard_fails, p_overrides, p_result)
@@ -233,7 +243,7 @@ end
 $$;
 
 create function record_lead_capture(p_lead_id uuid, p_stream call_stream, p_capture jsonb) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = qa as $$
 begin
   if p_stream = 'first_call' then
     update leads set first_call_capture = p_capture, updated_at = now() where id = p_lead_id;
@@ -244,7 +254,7 @@ end
 $$;
 
 create function mark_scoring_failed(p_call_id uuid, p_reason text) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = qa as $$
 begin
   update calls set scoring_status = 'failed', not_scored_reason = p_reason where id = p_call_id;
 end
@@ -256,7 +266,7 @@ revoke all on function mark_scoring_failed(uuid, text) from public, anon, authen
 
 -- Login and password for this role are set once in the Supabase dashboard, never in this repo.
 create role scoring_agent nologin;
-grant usage on schema public to scoring_agent;
+grant usage on schema qa to scoring_agent;
 grant select on calls, transcript_segments, call_metrics, reference_versions, leads, people to scoring_agent;
 grant execute on function record_call_score(uuid, text, uuid[], numeric, score_band, jsonb, text[], text[], jsonb) to scoring_agent, service_role;
 grant execute on function record_lead_capture(uuid, call_stream, jsonb) to scoring_agent, service_role;

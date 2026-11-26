@@ -1,3 +1,8 @@
+# Shared Supabase project "dny-agents" (ref iaxjxefipmdumfukttvv): Call to Action owns schema public,
+# Sales QA (this repo) owns schema qa. The hosted config (API, Auth, the magic-link email) is one
+# for both apps, so this file and dny-call-to-action's supabase/config.toml hold the same settings (only
+# project_id differs): change both, and both supabase/templates/magic_link.html files, together.
+
 # For detailed configuration reference documentation, visit:
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
@@ -10,10 +15,10 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+schemas = ["public", "graphql_public", "qa"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
-# The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
+# The maximum number of rows returned from a view, table, or stored procedure. Limits payload size
 # for accidental or malicious requests.
 max_rows = 1000
 # Controls whether new tables, views, sequences and functions created in the `public` schema by
@@ -50,9 +55,9 @@ port = 54329
 # Configure one of the supported pooler modes: `transaction`, `session`.
 pool_mode = "transaction"
 # How many server connections to allow per user/database pair.
-default_pool_size = 15
+default_pool_size = 20
 # Maximum number of client connections allowed.
-max_client_conn = 200
+max_client_conn = 100
 
 # [db.vault]
 # secret_key = "env(SECRET_VALUE)"
@@ -136,8 +141,8 @@ enabled = true
 # Store analytical data in S3 for running ETL jobs over Iceberg Catalog
 # This feature is only available on the hosted platform.
 [storage.analytics]
-enabled = true
-max_namespaces = 10
+enabled = false
+max_namespaces = 5
 max_tables = 10
 max_catalogs = 2
 
@@ -157,11 +162,20 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "https://dny-call-qa.vercel.app"
+site_url = "https://dny-call-to-action.vercel.app"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://dny-call-qa.vercel.app/auth/callback", "http://localhost:3100/auth/callback"]
+# The production callback is covered by site_url's host; localhost needs listing. The sign-in page
+# appends ?next=<path> to the callback, so the wildcard entry lets a local redirect keep its query.
+additional_redirect_urls = [
+  "https://dny-call-to-action.vercel.app/auth/callback",
+  "http://localhost:3200/auth/callback",
+  "http://localhost:3200/auth/callback**",
+  # Sales QA (dny-call-qa) shares this project and signs in here too.
+  "https://dny-call-qa.vercel.app/auth/callback",
+  "http://localhost:3100/auth/callback",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -173,7 +187,8 @@ enable_refresh_token_rotation = true
 # Allows refresh tokens to be reused after expiry, up to the specified interval in seconds.
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
-# Allow/disallow new user signups to your project.
+# Sign-ups are closed: only logins created by an admin (Settings > Team or scripts/people.mts) exist,
+# and the people table decides who gets in. Google and email links work for existing users only.
 enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
@@ -183,7 +198,7 @@ enable_manual_linking = false
 minimum_password_length = 6
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
-# password_requirements: left as set in the dashboard
+password_requirements = ""
 
 # Configure passkey sign-ins.
 # [auth.passkey]
@@ -218,19 +233,22 @@ web3 = 30
 # secret = ""
 
 [auth.email]
-# Allow/disallow new user signups via email to your project.
-enable_signup = true
+# Allow/disallow the email provider. When false, users can't sign up or sign in with email.
+# To block new signups only, set enable_signup = false under [auth] instead.
+# Kept on for the one-time sign-in links; with [auth] enable_signup = false an unknown address gets
+# "Signups not allowed", which the login page explains as "not on the team list".
+enabled = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = true
+enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
-max_frequency = "1m0s"
+max_frequency = "1s"
 # Number of characters used in the email OTP.
-otp_length = 8
+otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
@@ -244,17 +262,17 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Sign-in link: token_hash works on any device (the default code link only works in the
-# browser that asked for it). It returns to {{ .RedirectTo }}, the /auth/callback of whichever site
-# asked (localhost or Vercel), which must be listed in additional_redirect_urls.
-[auth.email.template.magic_link]
-subject = "Your DNY Sales Agent sign-in link"
-content_path = "./supabase/templates/magic_link.html"
-
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
+
+# One-time sign-in email in the app's own look. The link lands on our /auth/callback with the hashed
+# token (not on Supabase's verify page), so it works on any device. Applied with `npx supabase config push`.
+[auth.email.template.magic_link]
+# Shared with Sales QA: a link that returns to Sales QA gets its subject and email (supabase/templates/magic_link.html).
+subject = "{{ if or (eq (printf \"%.30s\" .RedirectTo) \"https://dny-call-qa.vercel.app\") (eq (printf \"%.21s\" .RedirectTo) \"http://localhost:3100\") }}Your DNY Sales Agent sign-in link{{ else }}Your Call to Action sign-in link{{ end }}"
+content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
@@ -263,8 +281,9 @@ content_path = "./supabase/templates/magic_link.html"
 # content_path = "./supabase/templates/password_changed_notification.html"
 
 [auth.sms]
-# Allow/disallow new user signups via SMS to your project.
-enable_signup = false
+# Allow/disallow the phone provider. When false, users can't sign up or sign in with SMS.
+# To block new signups only, set enable_signup = false under [auth] instead.
+enabled = false
 # If enabled, users need to confirm their phone number before signing in.
 enable_confirmations = false
 # Template for sending OTP to users
@@ -273,8 +292,9 @@ template = "Your code is {{ .Code }}"
 max_frequency = "5s"
 
 # Use pre-defined map of phone number to OTP for testing.
+# Keys are the phone number with country code and without the + prefix.
 # [auth.sms.test_otp]
-# 4152127777 = "123456"
+# 14152127777 = "123456"
 
 # Configure logged in session timeouts.
 # [auth.sessions]
@@ -308,8 +328,8 @@ max_enrolled_factors = 10
 
 # Control MFA via App Authenticator (TOTP)
 [auth.mfa.totp]
-enroll_enabled = true
-verify_enabled = true
+enroll_enabled = false
+verify_enabled = false
 
 # Configure MFA via Phone Messaging
 [auth.mfa.phone]
@@ -326,10 +346,19 @@ max_frequency = "5s"
 
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
-# `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
-# Sign in with Google (DNY's Google Workspace). The Google client is "Internal", so only
-# dnyhospitality.com accounts can use it; the app also requires an active person on the team list.
-# Values come from .env.local when running `supabase config push`; never commit them.
+# `twitter`, `x`, `slack_oidc`, `spotify`, `workos`, `zoom`.
+# Sign in with Google (DNY's Workspace only). One-time setup in Google Cloud, done by tech@dnyhospitality.com:
+#   1. console.cloud.google.com, the app's OWN project "DNY Call to Action" in the DNY organisation (kept separate from the sales agent).
+#   2. APIs & Services > OAuth consent screen: audience "Internal", so only dnyhospitality.com accounts can
+#      finish the sign-in. App name "Call to Action", support email tech@dnyhospitality.com.
+#   3. Credentials > Create credentials > OAuth client ID, type "Web application", name "Call to Action".
+#      Authorised JavaScript origins: https://dny-call-to-action.vercel.app and http://localhost:3200
+#      Authorised redirect URI:       https://iaxjxefipmdumfukttvv.supabase.co/auth/v1/callback
+#   4. Save the client id and secret with `bash scripts/save-key.sh GOOGLE_CLIENT_ID` and
+#      `bash scripts/save-key.sh GOOGLE_CLIENT_SECRET`, then `npx supabase config push` reads them from
+#      .env.local through env() below. Never paste them into this file.
+# The login page also sends hd=dnyhospitality.com so Google's account picker shows work accounts first;
+# the real gate is the people table, checked in /auth/callback and on every request.
 [auth.external.google]
 enabled = true
 client_id = "env(GOOGLE_CLIENT_ID)"
@@ -353,10 +382,14 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
-# Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
+# Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]
 enabled = false
+
+# Allow Ethereum wallet holders to sign in to your project via the Sign in with Ethereum (SIWE, EIP-4361) standard.
+# [auth.web3.ethereum]
+# enabled = true
 
 # Use Firebase Auth as a third-party provider alongside Supabase Auth.
 [auth.third_party.firebase]
@@ -421,7 +454,7 @@ s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
 
-# pg-delta is the schema diff engine for db diff / db pull / db remote commit.
+# pg-delta is the schema diff engine for db diff / db pull.
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]
 enabled = true
